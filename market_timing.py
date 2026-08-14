@@ -154,14 +154,14 @@ def _regime(dimensions: list[dict]) -> dict:
 
 
 def _benchmark(points: list[dict], symbol: str, name: str) -> dict:
-    recent = points[-60:]
-    base = recent[0]["close"]
+    recent = points[-500:]
     return {
         "symbol": symbol,
         "name": name,
         "close": round(points[-1]["close"], 2),
         "changePercent": round(_return_pct(points, 1), 2),
-        "history": [{"date": point["date"], "value": round(point["close"] / base * 100, 4)} for point in recent],
+        "availableFrom": recent[0]["date"],
+        "history": [{"date": point["date"], "value": round(point["close"], 4)} for point in recent],
     }
 
 

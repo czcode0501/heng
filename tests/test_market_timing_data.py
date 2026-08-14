@@ -53,6 +53,18 @@ class MarketTimingContractTests(unittest.TestCase):
         self.assertEqual(market["dataQuality"]["status"], "live")
         self.assertEqual(market["source"]["mode"], "zero-config")
 
+    def test_benchmark_exposes_enough_raw_history_for_one_year_comparisons(self):
+        rising = make_series(3_000, 4)
+        market = build_china_market(
+            {key: rising for key in ["csi300", "sse", "szse", "chinext", "csi1000"]},
+            source={"name": "BaoStock", "mode": "zero-config"},
+        )
+
+        history = market["benchmark"]["history"]
+        self.assertEqual(len(history), 260)
+        self.assertEqual(history[0], {"date": rising[0]["date"], "value": rising[0]["close"]})
+        self.assertEqual(market["benchmark"]["availableFrom"], rising[0]["date"])
+
     def test_us_market_uses_vix_equal_weight_and_credit_risk_proxies(self):
         rising = make_series(400, 1.2)
         stronger = make_series(100, 0.5)
