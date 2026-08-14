@@ -2,6 +2,7 @@ import unittest
 
 from api_server import (
     baostock_code_to_yahoo,
+    calculate_technical_snapshot,
     normalize_baostock_row,
     normalize_yahoo_quote,
     validate_search_query,
@@ -46,6 +47,23 @@ class SearchContractTests(unittest.TestCase):
             validate_search_query("   ")
         with self.assertRaises(ValueError):
             validate_search_query("x" * 41)
+
+    def test_technical_snapshot_reports_trend_and_indicators(self):
+        closes = [float(value) for value in range(101, 171)]
+
+        snapshot = calculate_technical_snapshot(closes)
+
+        self.assertEqual(snapshot["trend"], "strong_up")
+        self.assertEqual(snapshot["ma20"], 160.5)
+        self.assertEqual(snapshot["ma60"], 140.5)
+        self.assertEqual(snapshot["rsi14"], 100.0)
+        self.assertEqual(snapshot["periodHigh"], 170.0)
+        self.assertEqual(snapshot["periodLow"], 101.0)
+        self.assertEqual(snapshot["rangePosition"], 100.0)
+
+    def test_technical_snapshot_requires_enough_history(self):
+        with self.assertRaises(ValueError):
+            calculate_technical_snapshot([100.0] * 19)
 
 
 if __name__ == "__main__":

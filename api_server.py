@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 import re
+import statistics
 import threading
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -171,6 +173,96 @@ def get_quote(provider_symbol: str) -> dict:
     }
 
 
+def calculate_technical_snapshot(closes: list[float]) -> dict:
+    """Calculate a compact, deterministic technical snapshot from daily closes."""
+    clean_closes = [float(value) for value in closes if value is not None and math.isfinite(float(value))]
+    if len(clean_closes) < 20:
+        raise ValueError("至少需要20个交易日的数据才能生成分析")
+
+    price = clean_closes[-1]
+    ma20 = statistics.fmean(clean_closes[-20:])
+    ma60 = statistics.fmean(clean_closes[-60:]) if len(clean_closes) >= 60 else None
+
+    rsi_window = clean_closes[-15:]
+    changes = [current - previous for previous, current in zip(rsi_window, rsi_window[1:])]
+    gains = [max(change, 0.0) for change in changes]
+    losses = [max(-change, 0.0) for change in changes]
+    average_gain = statistics.fmean(gains)
+    average_loss = statistics.fmean(losses)
+    rsi14 = 100.0 if average_loss == 0 else 100 - (100 / (1 + average_gain / average_loss))
+
+    volatility_prices = clean_closes[-21:]
+    daily_returns = [
+        current / previous - 1
+        for previous, current in zip(volatility_prices, volatility_prices[1:])
+        if previous
+    ]
+    volatility20 = statistics.pstdev(daily_returns) * math.sqrt(252) * 100 if len(daily_returns) > 1 else 0.0
+
+    period_high = max(clean_closes)
+    period_low = min(clean_closes)
+    price_range = period_high - period_low
+    range_position = ((price - period_low) / price_range * 100) if price_range else 50.0
+
+    if ma60 is not None and price > ma20 > ma60:
+        trend = "strong_up"
+    elif price > ma20:
+        trend = "up"
+    elif ma60 is not None and price < ma20 < ma60:
+        trend = "strong_down"
+    elif price < ma20:
+        trend = "down"
+    else:
+        trend = "neutral"
+
+    return {
+        "trend": trend,
+        "ma20": round(ma20, 4),
+        "ma60": round(ma60, 4) if ma60 is not None else None,
+        "rsi14": round(rsi14, 2),
+        "volatility20": round(volatility20, 2),
+        "periodHigh": round(period_high, 4),
+        "periodLow": round(period_low, 4),
+        "rangePosition": round(range_position, 2),
+        "sampleDays": len(clean_closes),
+    }
+
+
+def get_stock_analysis(provider_symbol: str) -> dict:
+    import yfinance as yf
+
+    symbol = (provider_symbol or "").strip().upper()
+    if not YAHOO_SYMBOL_PATTERN.fullmatch(symbol):
+        raise ValueError("股票代码格式不正确")
+
+    ticker = yf.Ticker(symbol)
+    history = ticker.history(period="1y", interval="1d", auto_adjust=False)
+    if history.empty or "Close" not in history:
+        raise LookupError("没有找到该股票的历史行情数据")
+
+    closes = history["Close"].dropna().astype(float).tolist()
+    snapshot = calculate_technical_snapshot(closes)
+    price = closes[-1]
+    previous_close = closes[-2] if len(closes) > 1 else None
+    change_percent = ((price / previous_close) - 1) * 100 if previous_close else None
+
+    try:
+        fast_info = dict(ticker.fast_info)
+    except Exception:
+        fast_info = {}
+
+    return {
+        "providerSymbol": symbol,
+        "price": round(price, 4),
+        "previousClose": round(previous_close, 4) if previous_close else None,
+        "changePercent": round(change_percent, 4) if change_percent is not None else None,
+        "currency": fast_info.get("currency") or ("CNY" if symbol.endswith((".SS", ".SZ", ".BJ")) else "USD"),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "source": "Yahoo Finance",
+        "analysis": snapshot,
+    }
+
+
 class MarketDataHandler(BaseHTTPRequestHandler):
     server_version = "QuantDeskAPI/0.1"
 
@@ -185,6 +277,10 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/quotes":
                 data = get_quote(params.get("symbol", [""])[0])
+                self.send_json(200, {"data": data})
+                return
+            if parsed.path == "/api/analysis":
+                data = get_stock_analysis(params.get("symbol", [""])[0])
                 self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/health":
