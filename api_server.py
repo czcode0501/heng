@@ -11,6 +11,7 @@ from datetime import date, datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from capital_flow_sources import get_capital_flow_dashboard
 from macro_data import get_macro_dashboard
 from market_timing import apply_market_timing_range
 from market_timing_sources import get_market_timing_dashboard
@@ -320,6 +321,11 @@ class MarketDataHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/sector-rotation":
                 force = params.get("refresh", ["0"])[0] == "1"
                 data = get_sector_rotation_dashboard(force=force)
+                self.send_json(200, {"data": data})
+                return
+            if parsed.path == "/api/capital-flow":
+                force = params.get("refresh", ["0"])[0] == "1"
+                data = get_capital_flow_dashboard(force=force)
                 self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/health":

@@ -52,6 +52,9 @@ class SectorRotationModelTests(unittest.TestCase):
         self.assertEqual([sector["rank"] for sector in market["sectors"]], list(range(1, 12)))
         self.assertEqual(set(market["sectors"][0]["dimensions"]), set(DIMENSION_WEIGHTS))
         self.assertEqual(sum(DIMENSION_WEIGHTS.values()), 100)
+        self.assertEqual(DIMENSION_WEIGHTS["capitalFlow"], 15)
+        self.assertNotIn("participation", DIMENSION_WEIGHTS)
+        self.assertIn("metrics", market["sectors"][0]["capitalFlow"])
         self.assertGreater(market["sectors"][0]["score"], market["sectors"][-1]["score"])
         self.assertEqual(market["timing"]["maxExposure"], 60)
 

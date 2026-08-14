@@ -7,12 +7,14 @@ import statistics
 from copy import deepcopy
 from typing import Iterable
 
+from capital_flow import build_capital_flow_snapshot
+
 
 DIMENSION_WEIGHTS = {
-    "relativeMomentum": 35,
+    "relativeMomentum": 30,
     "trendQuality": 25,
     "breadth": 15,
-    "participation": 10,
+    "capitalFlow": 15,
     "riskEfficiency": 10,
     "macroFit": 5,
 }
@@ -21,7 +23,7 @@ DIMENSION_LABELS = {
     "relativeMomentum": "相对动量",
     "trendQuality": "趋势质量",
     "breadth": "市场宽度",
-    "participation": "资金参与",
+    "capitalFlow": "资金确认",
     "riskEfficiency": "风险效率",
     "macroFit": "宏观适配",
 }
@@ -48,6 +50,8 @@ def _validated_series(points: Iterable[dict], name: str, minimum: int = 60) -> l
             rows.append(
                 {
                     "date": str(point["date"])[:10],
+                    "high": max(float(point.get("high") or close), close),
+                    "low": min(float(point.get("low") or close), close),
                     "close": close,
                     "volume": max(0.0, float(point.get("volume") or 0)),
                 }
@@ -143,12 +147,6 @@ def _breadth_proxy(points: list[dict]) -> float:
     return _clamp((up_ratio * 0.55 + range_position * 0.45) * 100)
 
 
-def _participation_ratio(points: list[dict]) -> float:
-    recent = _mean(point["volume"] for point in points[-20:])
-    baseline = _mean(point["volume"] for point in points[-80:-20])
-    return recent / baseline if baseline else 1.0
-
-
 def _risk_efficiency(points: list[dict], benchmark: list[dict]) -> float:
     relative = (_period_return(points, 60) or 0.0) - (_period_return(benchmark, 60) or 0.0)
     volatility = max(_volatility(points), 1.0)
@@ -213,13 +211,14 @@ def _snapshot(benchmark: list[dict], definitions: list[dict], offset: int = 0) -
         points = definition["points"][:-offset] if offset else definition["points"]
         momentum, issues = _relative_momentum(points, benchmark_slice)
         trend, extension = _trend_score(points)
+        capital_flow = build_capital_flow_snapshot(points, include_history=False)
         raw.append(
             {
                 "id": definition["id"],
                 "momentumRaw": momentum,
                 "trendQuality": trend,
                 "breadth": _breadth_proxy(points),
-                "participationRaw": _participation_ratio(points),
+                "capitalFlow": capital_flow,
                 "riskRaw": _risk_efficiency(points, benchmark_slice),
                 "macroFit": float(definition.get("macroFit", 50)),
                 "extension": extension,
@@ -228,14 +227,13 @@ def _snapshot(benchmark: list[dict], definitions: list[dict], offset: int = 0) -
             }
         )
     momentum_scores = _percentiles({item["id"]: item["momentumRaw"] for item in raw})
-    participation_scores = _percentiles({item["id"]: item["participationRaw"] for item in raw})
     risk_scores = _percentiles({item["id"]: item["riskRaw"] for item in raw})
     for item in raw:
         item["dimensions"] = {
             "relativeMomentum": round(momentum_scores[item["id"]], 1),
             "trendQuality": round(item["trendQuality"], 1),
             "breadth": round(item["breadth"], 1),
-            "participation": round(participation_scores[item["id"]], 1),
+            "capitalFlow": round(item["capitalFlow"]["score"], 1),
             "riskEfficiency": round(risk_scores[item["id"]], 1),
             "macroFit": round(item["macroFit"], 1),
         }
@@ -305,6 +303,7 @@ def build_sector_market(
     sectors = []
     for definition in definitions:
         score = current_by_id[definition["id"]]
+        capital_flow = build_capital_flow_snapshot(definition["points"])
         score_change = round(score["score"] - previous_scores[definition["id"]], 1)
         phase = classify_rotation_phase(score["score"], score_change, score["trendQuality"], score["extension"])
         sectors.append(
@@ -318,6 +317,7 @@ def build_sector_market(
                 "scoreChange": score_change,
                 "confidence": score["confidence"],
                 "dimensions": score["dimensions"],
+                "capitalFlow": capital_flow,
                 "phase": phase,
                 "action": _action_for(phase, score["confidence"]),
                 "returns": {
