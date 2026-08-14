@@ -6,7 +6,9 @@
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "dev:api": "python api_server.py",
-    "test": "python -m unittest discover -s tests -v",
+    "test": "npm run test:api && npm run test:ui",
+    "test:api": "python -m unittest discover -s tests -v",
+    "test:ui": "node --test tests/*.test.js",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

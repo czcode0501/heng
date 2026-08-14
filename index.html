@@ -60,7 +60,7 @@
               <span class="search-icon" aria-hidden="true">⌕</span>
               <input id="stock-search" type="search" autocomplete="off" placeholder="搜索代码或名称，例如 AAPL / 贵州茅台" />
               <kbd>⌘ K</kbd>
-              <div id="search-results" class="search-results" role="listbox" aria-label="股票搜索结果" hidden></div>
+              <div id="search-results" class="search-results" role="list" aria-label="股票搜索结果" hidden></div>
             </div>
             <button class="theme-toggle" id="theme-toggle" type="button" aria-label="切换到深色模式" aria-pressed="false">
               <span aria-hidden="true">☾</span>
@@ -177,6 +177,34 @@
           <button class="button primary" value="default" type="submit">创建组合</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="stock-analysis-dialog" class="analysis-dialog" aria-labelledby="analysis-stock-name">
+      <div class="analysis-shell">
+        <header class="analysis-header">
+          <div class="analysis-identity">
+            <span class="stock-avatar analysis-avatar" id="analysis-stock-avatar" aria-hidden="true">--</span>
+            <div>
+              <div class="analysis-title-row">
+                <h2 id="analysis-stock-name">股票分析</h2>
+                <span class="market-badge" id="analysis-stock-market">--</span>
+              </div>
+              <p id="analysis-stock-meta">请选择一只股票查看分析</p>
+            </div>
+          </div>
+          <div class="analysis-actions">
+            <button class="button primary" id="analysis-add-button" type="button">添加到当前组合</button>
+            <button class="icon-button analysis-close" id="close-analysis" type="button" aria-label="关闭股票分析">
+              <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" /></svg>
+            </button>
+          </div>
+        </header>
+        <div id="analysis-content" class="analysis-content" aria-live="polite"></div>
+        <footer class="analysis-footer">
+          <span>分析基于历史行情和技术指标，仅供研究参考，不构成投资建议。</span>
+          <span id="analysis-source">数据源：--</span>
+        </footer>
+      </div>
     </dialog>
 
     <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

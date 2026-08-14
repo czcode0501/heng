@@ -1,3 +1,5 @@
+import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
+
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
   { symbol: "000001", yahoo: "000001.SZ", name: "平安银行", market: "A股 · 深圳", currency: "CNY", price: 11.11, change: -1.24 },
@@ -49,6 +51,8 @@ const usdCny = 7.18;
 let latestSearchResults = [];
 let searchTimer;
 let searchRequestId = 0;
+let analysisRequestId = 0;
+let activeAnalysisResult = null;
 
 const elements = {
   portfolioList: document.querySelector("#portfolio-list"),
@@ -68,6 +72,14 @@ const elements = {
   createForm: document.querySelector("#create-portfolio-form"),
   toast: document.querySelector("#toast"),
   themeToggle: document.querySelector("#theme-toggle"),
+  analysisDialog: document.querySelector("#stock-analysis-dialog"),
+  analysisContent: document.querySelector("#analysis-content"),
+  analysisName: document.querySelector("#analysis-stock-name"),
+  analysisAvatar: document.querySelector("#analysis-stock-avatar"),
+  analysisMarket: document.querySelector("#analysis-stock-market"),
+  analysisMeta: document.querySelector("#analysis-stock-meta"),
+  analysisSource: document.querySelector("#analysis-source"),
+  analysisAddButton: document.querySelector("#analysis-add-button"),
 };
 
 function stockBySymbol(symbol) {
@@ -213,14 +225,110 @@ function renderSearchMessage(title, detail, state = "status") {
 
 function renderSearchOptions(results) {
   latestSearchResults = results;
+  const portfolio = portfolios.find((item) => item.id === activePortfolioId);
   elements.searchResults.innerHTML = results.length
-    ? results.map((stock, index) => `<button class="search-option" type="button" role="option" data-result-index="${index}">
-        <span class="stock-avatar">${escapeHtml(stock.symbol.slice(0, 2))}</span>
-        <span><strong>${escapeHtml(stock.name)}</strong><small>${escapeHtml(stock.symbol)} · ${escapeHtml(stock.market)} · ${escapeHtml(stock.source || "本地")}</small></span>
-        <span>添加</span>
-      </button>`).join("")
+    ? results.map((stock, index) => {
+      const actions = getSearchResultActions(portfolio, stock);
+      return `<div class="search-option" role="listitem">
+        <button class="search-analysis-trigger" type="button" data-view-analysis="${index}" aria-label="查看${escapeHtml(stock.name)}分析">
+          <span class="stock-avatar">${escapeHtml(stock.symbol.slice(0, 2))}</span>
+          <span><strong>${escapeHtml(stock.name)}</strong><small>${escapeHtml(stock.symbol)} · ${escapeHtml(stock.market)} · ${escapeHtml(stock.source || "本地")}</small></span>
+          <span class="view-analysis-label">查看分析 <span aria-hidden="true">→</span></span>
+        </button>
+        <button class="search-add-button" type="button" data-add-result="${index}" ${actions.canAdd ? "" : "disabled"}>${actions.addLabel}</button>
+      </div>`;
+    }).join("")
     : `<div class="search-feedback" role="status"><strong>没有找到匹配标的</strong><small>请检查代码，或尝试输入完整公司名称。</small></div>`;
   elements.searchResults.hidden = false;
+}
+
+function updateAnalysisAddButton() {
+  if (!activeAnalysisResult) return;
+  const portfolio = portfolios.find((item) => item.id === activePortfolioId);
+  const actions = getSearchResultActions(portfolio, activeAnalysisResult);
+  elements.analysisAddButton.disabled = !actions.canAdd;
+  elements.analysisAddButton.textContent = actions.canAdd ? `添加到 ${portfolio.name}` : `已在 ${portfolio.name}`;
+}
+
+function renderAnalysisLoading() {
+  elements.analysisContent.innerHTML = `<div class="analysis-loading" role="status" aria-busy="true">
+    <span class="loading-pulse" aria-hidden="true"></span>
+    <strong>正在生成行情分析</strong>
+    <small>读取历史价格并计算趋势指标…</small>
+  </div>`;
+}
+
+function renderStockAnalysis(payload) {
+  const metrics = payload.analysis;
+  const trend = getTrendPresentation(metrics.trend);
+  const dailyChange = payload.changePercent ?? 0;
+  const changeTone = dailyChange >= 0 ? "positive" : "negative";
+  const ma20Distance = metrics.ma20 ? ((payload.price / metrics.ma20) - 1) * 100 : 0;
+  const rsiState = metrics.rsi14 >= 70 ? "偏热" : metrics.rsi14 <= 30 ? "偏冷" : "中性";
+  const rangePosition = Math.min(100, Math.max(0, metrics.rangePosition));
+
+  elements.analysisContent.innerHTML = `<section class="analysis-overview" aria-label="行情概览">
+    <div class="analysis-price-block">
+      <span>最新收盘价</span>
+      <strong>${formatPrice(payload.price, payload.currency)}</strong>
+      <em class="analysis-change ${changeTone}">${dailyChange >= 0 ? "+" : ""}${dailyChange.toFixed(2)}% 今日</em>
+    </div>
+    <div class="trend-summary ${trend.tone}">
+      <span>趋势判断</span>
+      <strong>${trend.label}</strong>
+      <p>${trend.summary}</p>
+    </div>
+  </section>
+  <section class="analysis-metrics" aria-label="技术指标">
+    <article><span>20日均线</span><strong>${formatPrice(metrics.ma20, payload.currency)}</strong><small class="${ma20Distance >= 0 ? "positive" : "negative"}">现价 ${ma20Distance >= 0 ? "高于" : "低于"} ${Math.abs(ma20Distance).toFixed(2)}%</small></article>
+    <article><span>60日均线</span><strong>${metrics.ma60 == null ? "数据不足" : formatPrice(metrics.ma60, payload.currency)}</strong><small>中期趋势参考</small></article>
+    <article><span>RSI（14日）</span><strong>${metrics.rsi14.toFixed(1)}</strong><small>${rsiState}区间</small></article>
+    <article><span>20日年化波动</span><strong>${metrics.volatility20.toFixed(1)}%</strong><small>历史波动指标</small></article>
+  </section>
+  <section class="range-card" aria-labelledby="price-range-title">
+    <div class="range-heading"><div><span>近一年收盘区间</span><strong id="price-range-title">当前位于区间 ${rangePosition.toFixed(0)}%</strong></div><small>${metrics.sampleDays} 个交易日</small></div>
+    <div class="range-track" aria-hidden="true"><i style="--range-position:${rangePosition}%"></i></div>
+    <div class="range-values"><span>低 ${formatPrice(metrics.periodLow, payload.currency)}</span><span>高 ${formatPrice(metrics.periodHigh, payload.currency)}</span></div>
+  </section>`;
+
+  const updatedAt = new Date(payload.timestamp).toLocaleString("zh-CN", { hour12: false });
+  elements.analysisSource.textContent = `数据源：${payload.source} · 更新于 ${updatedAt}`;
+}
+
+async function openStockAnalysis(result) {
+  const requestId = ++analysisRequestId;
+  activeAnalysisResult = result;
+  elements.analysisName.textContent = result.name;
+  elements.analysisAvatar.textContent = result.symbol.slice(0, 2);
+  elements.analysisMarket.textContent = result.currency === "USD" ? "US" : "CN";
+  elements.analysisMeta.textContent = `${result.symbol} · ${result.market}`;
+  elements.analysisSource.textContent = `数据源：${result.source || "--"}`;
+  updateAnalysisAddButton();
+  renderAnalysisLoading();
+  elements.searchResults.hidden = true;
+  if (!elements.analysisDialog.open) elements.analysisDialog.showModal();
+
+  try {
+    const response = await fetch(`/api/analysis?symbol=${encodeURIComponent(result.providerSymbol)}`);
+    const payload = await response.json();
+    if (requestId !== analysisRequestId) return;
+    if (!response.ok) throw new Error(payload?.error?.message || "分析数据读取失败");
+    renderStockAnalysis(payload.data);
+    if (!stockBySymbol(result.symbol)) {
+      stockCatalog.push({
+        symbol: result.symbol,
+        yahoo: result.providerSymbol,
+        name: result.name,
+        market: result.market,
+        currency: payload.data.currency || result.currency,
+        price: payload.data.price,
+        change: payload.data.changePercent ?? 0,
+      });
+    }
+  } catch (error) {
+    if (requestId !== analysisRequestId) return;
+    elements.analysisContent.innerHTML = `<div class="analysis-error" role="alert"><strong>暂时无法生成分析</strong><p>${escapeHtml(error.message || "行情数据源暂时不可用，请稍后重试")}</p><button class="button secondary" type="button" data-retry-analysis>重新加载</button></div>`;
+  }
 }
 
 async function searchRemote(query) {
@@ -255,6 +363,7 @@ elements.portfolioList.addEventListener("click", (event) => {
   if (!button) return;
   activePortfolioId = button.dataset.portfolioId;
   render();
+  updateAnalysisAddButton();
 });
 
 elements.search.addEventListener("input", (event) => scheduleSearch(event.target.value));
@@ -262,21 +371,29 @@ elements.search.addEventListener("keydown", (event) => {
   if (event.key === "Escape") elements.searchResults.hidden = true;
 });
 elements.searchResults.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-result-index]");
-  if (!button) return;
-  const result = latestSearchResults[Number(button.dataset.resultIndex)];
-  if (!result) return;
-  addSearchResultToPortfolio(result, button);
+  const viewButton = event.target.closest("[data-view-analysis]");
+  if (viewButton) {
+    const result = latestSearchResults[Number(viewButton.dataset.viewAnalysis)];
+    if (result) openStockAnalysis(result);
+    return;
+  }
+
+  const addButton = event.target.closest("[data-add-result]");
+  if (!addButton) return;
+  const result = latestSearchResults[Number(addButton.dataset.addResult)];
+  if (result) addSearchResultToPortfolio(result, addButton);
 });
 
 async function addSearchResultToPortfolio(result, button) {
   const portfolio = portfolios.find((item) => item.id === activePortfolioId);
   if (portfolio.positions.some((position) => position.symbol === result.symbol)) {
     showToast(`${result.name} 已在当前组合中`);
+    renderSearchOptions(latestSearchResults);
+    updateAnalysisAddButton();
     return;
   }
   button.disabled = true;
-  button.querySelector("span:last-child").textContent = "读取行情…";
+  button.textContent = "读取中…";
   try {
     let stock = stockBySymbol(result.symbol);
     if (!stock) {
@@ -296,13 +413,13 @@ async function addSearchResultToPortfolio(result, button) {
     }
     portfolio.positions.push({ symbol: stock.symbol, quantity: stock.currency === "USD" ? 10 : 1000, cost: stock.price });
     showToast(`已将 ${stock.name} 加入 ${portfolio.name}`);
-    elements.search.value = "";
-    elements.searchResults.hidden = true;
     render();
+    renderSearchOptions(latestSearchResults);
+    updateAnalysisAddButton();
   } catch (error) {
     showToast(error.message || "添加失败，请稍后重试");
     button.disabled = false;
-    button.querySelector("span:last-child").textContent = "重试";
+    button.textContent = "重试添加";
   }
 }
 
@@ -349,6 +466,17 @@ document.addEventListener("keydown", (event) => {
 });
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
+});
+
+document.querySelector("#close-analysis").addEventListener("click", () => elements.analysisDialog.close());
+elements.analysisAddButton.addEventListener("click", () => {
+  if (activeAnalysisResult) addSearchResultToPortfolio(activeAnalysisResult, elements.analysisAddButton);
+});
+elements.analysisContent.addEventListener("click", (event) => {
+  if (event.target.closest("[data-retry-analysis]") && activeAnalysisResult) openStockAnalysis(activeAnalysisResult);
+});
+elements.analysisDialog.addEventListener("click", (event) => {
+  if (event.target === elements.analysisDialog) elements.analysisDialog.close();
 });
 
 elements.themeToggle.addEventListener("click", () => {
