@@ -3,7 +3,12 @@ import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
 import { macroMarkets } from "./signals/macro/catalog.js";
 import { renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
 import { marketTimingMarkets } from "./signals/market-timing/catalog.js";
-import { renderMarketTimingWorkspace } from "./signals/market-timing/view.js";
+import {
+  getMarketTimingRefreshDelay,
+  renderMarketTimingWorkspace,
+  renderMarketTimingWorkspaceError,
+  renderMarketTimingWorkspaceLoading,
+} from "./signals/market-timing/view.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -61,6 +66,9 @@ let macroRequestId = 0;
 let macroRefreshTimer;
 let macroTimeRange = 24;
 let latestMacroPayload = null;
+let marketTimingRequestId = 0;
+let marketTimingRefreshTimer;
+let latestMarketTimingPayload = null;
 let activeAnalysisResult = null;
 
 const elements = {
@@ -248,7 +256,10 @@ function renderSignalDetail(directory) {
   }
 
   if (directory.id === "market-timing") {
-    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(marketTimingMarkets);
+    elements.signalDetail.innerHTML = latestMarketTimingPayload
+      ? renderMarketTimingWorkspace(latestMarketTimingPayload)
+      : renderMarketTimingWorkspaceLoading(marketTimingMarkets);
+    loadMarketTimingWorkspaceData();
     return;
   }
 
@@ -301,6 +312,33 @@ async function loadMacroWorkspaceData(force = false) {
   }
 }
 
+async function loadMarketTimingWorkspaceData(force = false) {
+  const requestId = ++marketTimingRequestId;
+  const refreshButton = elements.signalDetail.querySelector("[data-refresh-market-timing]");
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = force ? "正在重新检查…" : "正在检查…";
+  }
+  try {
+    const response = await fetch(`/api/market-timing${force ? "?refresh=1" : ""}`);
+    const payload = await response.json();
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== marketTimingRequestId || route.directory !== "market-timing") return;
+    if (!response.ok) throw new Error(payload?.error?.message || "市场择时数据读取失败");
+    if (!Array.isArray(payload?.data?.markets)) throw new Error("市场择时数据返回格式不正确");
+    latestMarketTimingPayload = payload.data;
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(payload.data);
+    window.clearTimeout(marketTimingRefreshTimer);
+    marketTimingRefreshTimer = window.setTimeout(() => {
+      if (resolveWorkspaceRoute(window.location.hash).directory === "market-timing") loadMarketTimingWorkspaceData();
+    }, getMarketTimingRefreshDelay(payload.data));
+  } catch (error) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== marketTimingRequestId || route.directory !== "market-timing") return;
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspaceError(error.message || "数据源暂时不可用，请稍后重试", marketTimingMarkets);
+  }
+}
+
 function setPrimaryNavigation(workspace) {
   const isOverview = workspace === "overview";
   elements.navOverview.classList.toggle("active", isOverview);
@@ -320,6 +358,7 @@ function renderWorkspaceRoute() {
   elements.signalDetail.hidden = !directory;
   setPrimaryNavigation(route.workspace);
   renderSignalDirectoryStructure(directory?.id || null);
+  if (directory?.id !== "market-timing") window.clearTimeout(marketTimingRefreshTimer);
 
   if (isOverview) {
     const portfolio = portfolios.find((item) => item.id === activePortfolioId);
@@ -612,6 +651,10 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("[data-refresh-macro]")) {
     loadMacroWorkspaceData(true);
+    return;
+  }
+  if (event.target.closest("[data-refresh-market-timing]")) {
+    loadMarketTimingWorkspaceData(true);
     return;
   }
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
