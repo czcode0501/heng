@@ -46,6 +46,9 @@ const portfolios = [
 
 let activePortfolioId = portfolios[0].id;
 const usdCny = 7.18;
+let latestSearchResults = [];
+let searchTimer;
+let searchRequestId = 0;
 
 const elements = {
   portfolioList: document.querySelector("#portfolio-list"),
@@ -86,7 +89,7 @@ function formatMoney(value, currency = "CNY") {
   return new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency,
-    maximumFractionDigits: currency === "CNY" ? 0 : 2,
+    maximumFractionDigits: currency === "CNY" ? 3 : 2,
   }).format(value);
 }
 
@@ -185,23 +188,57 @@ function showToast(message) {
   showToast.timeout = window.setTimeout(() => { elements.toast.hidden = true; }, 2400);
 }
 
-function renderSearchResults(query) {
-  const normalized = query.trim().toLowerCase();
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function renderSearchMessage(title, detail, state = "status") {
+  elements.searchResults.innerHTML = `<div class="search-feedback" role="${state}"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(detail)}</small></div>`;
+  elements.searchResults.hidden = false;
+}
+
+function renderSearchOptions(results) {
+  latestSearchResults = results;
+  elements.searchResults.innerHTML = results.length
+    ? results.map((stock, index) => `<button class="search-option" type="button" role="option" data-result-index="${index}">
+        <span class="stock-avatar">${escapeHtml(stock.symbol.slice(0, 2))}</span>
+        <span><strong>${escapeHtml(stock.name)}</strong><small>${escapeHtml(stock.symbol)} · ${escapeHtml(stock.market)} · ${escapeHtml(stock.source || "本地")}</small></span>
+        <span>添加</span>
+      </button>`).join("")
+    : `<div class="search-feedback" role="status"><strong>没有找到匹配标的</strong><small>请检查代码，或尝试输入完整公司名称。</small></div>`;
+  elements.searchResults.hidden = false;
+}
+
+async function searchRemote(query) {
+  const requestId = ++searchRequestId;
+  renderSearchMessage("正在查询真实行情…", "正在连接A股与美股数据源");
+  try {
+    const response = await fetch(`/api/instruments/search?q=${encodeURIComponent(query)}`);
+    const payload = await response.json();
+    if (requestId !== searchRequestId) return;
+    if (!response.ok) throw new Error(payload?.error?.message || "搜索请求失败");
+    if (!Array.isArray(payload.data)) throw new Error("数据返回格式不正确");
+    renderSearchOptions(payload.data);
+  } catch (error) {
+    if (requestId !== searchRequestId) return;
+    renderSearchMessage("暂时无法搜索", error.message || "行情数据源暂时不可用，请稍后重试", "alert");
+  }
+}
+
+function scheduleSearch(query) {
+  window.clearTimeout(searchTimer);
+  const normalized = query.trim();
   if (!normalized) {
+    searchRequestId += 1;
     elements.searchResults.hidden = true;
     return;
   }
-  const results = stockCatalog.filter((stock) =>
-    `${stock.symbol} ${stock.yahoo} ${stock.name}`.toLowerCase().includes(normalized),
-  ).slice(0, 6);
-  elements.searchResults.innerHTML = results.length
-    ? results.map((stock) => `<button class="search-option" type="button" role="option" data-add-symbol="${stock.symbol}">
-        <span class="stock-avatar">${stock.symbol.slice(0, 2)}</span>
-        <span><strong>${stock.name}</strong><small>${stock.symbol} · ${stock.market}</small></span>
-        <span>添加</span>
-      </button>`).join("")
-    : `<div class="empty-state"><strong>没有找到匹配标的</strong><p>可以尝试输入完整股票代码。</p></div>`;
-  elements.searchResults.hidden = false;
+  searchTimer = window.setTimeout(() => searchRemote(normalized), 250);
 }
 
 elements.portfolioList.addEventListener("click", (event) => {
@@ -211,25 +248,54 @@ elements.portfolioList.addEventListener("click", (event) => {
   render();
 });
 
-elements.search.addEventListener("input", (event) => renderSearchResults(event.target.value));
+elements.search.addEventListener("input", (event) => scheduleSearch(event.target.value));
 elements.search.addEventListener("keydown", (event) => {
   if (event.key === "Escape") elements.searchResults.hidden = true;
 });
 elements.searchResults.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-add-symbol]");
+  const button = event.target.closest("[data-result-index]");
   if (!button) return;
+  const result = latestSearchResults[Number(button.dataset.resultIndex)];
+  if (!result) return;
+  addSearchResultToPortfolio(result, button);
+});
+
+async function addSearchResultToPortfolio(result, button) {
   const portfolio = portfolios.find((item) => item.id === activePortfolioId);
-  const stock = stockBySymbol(button.dataset.addSymbol);
-  if (portfolio.positions.some((position) => position.symbol === stock.symbol)) {
-    showToast(`${stock.name} 已在当前组合中`);
-  } else {
+  if (portfolio.positions.some((position) => position.symbol === result.symbol)) {
+    showToast(`${result.name} 已在当前组合中`);
+    return;
+  }
+  button.disabled = true;
+  button.querySelector("span:last-child").textContent = "读取行情…";
+  try {
+    let stock = stockBySymbol(result.symbol);
+    if (!stock) {
+      const response = await fetch(`/api/quotes?symbol=${encodeURIComponent(result.providerSymbol)}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || "行情读取失败");
+      stock = {
+        symbol: result.symbol,
+        yahoo: result.providerSymbol,
+        name: result.name,
+        market: result.market,
+        currency: payload.data.currency || result.currency,
+        price: payload.data.price,
+        change: payload.data.changePercent ?? 0,
+      };
+      stockCatalog.push(stock);
+    }
     portfolio.positions.push({ symbol: stock.symbol, quantity: stock.currency === "USD" ? 10 : 1000, cost: stock.price });
     showToast(`已将 ${stock.name} 加入 ${portfolio.name}`);
+    elements.search.value = "";
+    elements.searchResults.hidden = true;
     render();
+  } catch (error) {
+    showToast(error.message || "添加失败，请稍后重试");
+    button.disabled = false;
+    button.querySelector("span:last-child").textContent = "重试";
   }
-  elements.search.value = "";
-  elements.searchResults.hidden = true;
-});
+}
 
 elements.holdingsBody.addEventListener("click", (event) => {
   const button = event.target.closest("[data-remove-symbol]");

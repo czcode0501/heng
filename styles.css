@@ -90,6 +90,10 @@ kbd { position: absolute; top: 11px; right: 11px; padding: 3px 7px; background: 
 .search-option strong, .search-option small { display: block; }
 .search-option small { margin-top: 2px; color: var(--muted); }
 .search-option > span:last-child { color: var(--accent); font-size: 12px; font-weight: 700; }
+.search-option:disabled { cursor: wait; opacity: .68; }
+.search-feedback { display: grid; gap: 4px; padding: 18px 16px; }
+.search-feedback strong { font-size: 12px; }
+.search-feedback small { color: var(--muted); font-size: 11px; }
 
 .metrics-grid { display: grid; grid-template-columns: 1.3fr repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 .metric-card, .panel { background: var(--surface); border: 1px solid var(--border); }
@@ -217,4 +221,3 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; transition: none !important; animation: none !important; }
 }
-
