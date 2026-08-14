@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b1017" />
+    <title>衡策 Quant Desk</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="投资组合导航">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">衡</span>
+          <div>
+            <strong>衡策</strong>
+            <small>Quant Desk</small>
+          </div>
+        </div>
+
+        <nav class="workspace-nav" aria-label="主要导航">
+          <a class="nav-link active" href="#overview" aria-current="page">
+            <span aria-hidden="true">▦</span> 总览
+          </a>
+          <a class="nav-link" href="#signals"><span aria-hidden="true">⌁</span> 模型信号</a>
+          <a class="nav-link" href="#analysis"><span aria-hidden="true">◫</span> 组合对比</a>
+        </nav>
+
+        <section class="portfolio-nav" aria-labelledby="portfolio-heading">
+          <div class="section-heading-row">
+            <h2 id="portfolio-heading">我的组合</h2>
+            <button class="icon-button" id="open-create-dialog" type="button" aria-label="创建新投资组合">＋</button>
+          </div>
+          <div id="portfolio-list" class="portfolio-list"></div>
+        </section>
+
+        <div class="connection-card">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div>
+            <strong>数据接口已连接</strong>
+            <small>BaoStock · yfinance</small>
+          </div>
+        </div>
+      </aside>
+
+      <main id="main-content" class="main-content">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">PORTFOLIO OVERVIEW</p>
+            <h1 id="portfolio-title">核心长期组合</h1>
+          </div>
+          <div class="topbar-actions">
+            <div class="market-state" aria-label="市场状态">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span>美股盘中 · A股已收盘</span>
+            </div>
+            <div class="search-wrap">
+              <label class="sr-only" for="stock-search">搜索A股或美股</label>
+              <span class="search-icon" aria-hidden="true">⌕</span>
+              <input id="stock-search" type="search" autocomplete="off" placeholder="搜索代码或名称，例如 AAPL / 贵州茅台" />
+              <kbd>⌘ K</kbd>
+              <div id="search-results" class="search-results" role="listbox" aria-label="股票搜索结果" hidden></div>
+            </div>
+          </div>
+        </header>
+
+        <section class="metrics-grid" aria-label="组合概览">
+          <article class="metric-card primary-metric">
+            <div class="metric-label">组合总市值 <span class="live-label">实时</span></div>
+            <strong id="total-value">¥0</strong>
+            <div class="metric-foot"><span id="total-change" class="gain">—</span><span>今日收益</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">累计收益</div>
+            <strong id="total-return">—</strong>
+            <div class="metric-foot"><span id="profit-value">—</span><span>建仓以来</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">目标仓位</div>
+            <strong id="target-position">35%</strong>
+            <div class="metric-foot"><span class="neutral">宏观 30% + 择时 5%</span></div>
+          </article>
+          <article class="metric-card">
+            <div class="metric-label">风险状态</div>
+            <strong class="risk-state">中性偏多</strong>
+            <div class="metric-foot"><span class="neutral">宏观评分 +1</span></div>
+          </article>
+        </section>
+
+        <section class="dashboard-grid" id="overview">
+          <article class="panel holdings-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">POSITIONS</p>
+                <h2>当前持仓</h2>
+              </div>
+              <button class="button secondary" id="focus-search" type="button">＋ 添加标的</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th scope="col">标的</th>
+                    <th scope="col">市场</th>
+                    <th scope="col">最新价</th>
+                    <th scope="col">今日</th>
+                    <th scope="col">持仓市值</th>
+                    <th scope="col">权重</th>
+                    <th scope="col"><span class="sr-only">操作</span></th>
+                  </tr>
+                </thead>
+                <tbody id="holdings-body"></tbody>
+              </table>
+            </div>
+            <div id="holdings-empty" class="empty-state" hidden>
+              <strong>这个组合还没有持仓</strong>
+              <p>通过顶部搜索框添加A股或美股，开始验证你的投资思路。</p>
+              <button class="button primary" type="button">搜索第一只股票</button>
+            </div>
+          </article>
+
+          <aside class="panel allocation-panel" aria-labelledby="allocation-title">
+            <div class="panel-header compact">
+              <div>
+                <p class="eyebrow">ALLOCATION</p>
+                <h2 id="allocation-title">仓位分布</h2>
+              </div>
+              <button class="icon-button" type="button" aria-label="仓位分布设置">•••</button>
+            </div>
+            <div class="allocation-visual">
+              <div id="allocation-ring" class="allocation-ring" role="img" aria-label="股票与现金仓位占比">
+                <div><strong id="invested-percent">0%</strong><span>已投资</span></div>
+              </div>
+            </div>
+            <dl id="allocation-legend" class="allocation-legend"></dl>
+          </aside>
+        </section>
+
+        <section class="panel signals-panel" id="signals">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">FIVE-LAYER MODEL</p>
+              <h2>五层信号状态</h2>
+            </div>
+            <span class="updated-at">更新于 1 分钟前</span>
+          </div>
+          <div class="signal-grid">
+            <article><span>01</span><small>宏观流动性</small><strong>结构性行情</strong><em class="signal-up">偏多</em></article>
+            <article><span>02</span><small>市场择时</small><strong>均线修复</strong><em class="signal-up">+5%</em></article>
+            <article><span>03</span><small>板块轮动</small><strong>科技主线</strong><em class="signal-watch">观察</em></article>
+            <article><span>04</span><small>情绪反信号</small><strong>情绪正常</strong><em class="signal-flat">0%</em></article>
+            <article><span>05</span><small>仓位引擎</small><strong>目标 35%</strong><em class="signal-up">可配置</em></article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="create-portfolio-dialog">
+      <form method="dialog" id="create-portfolio-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">NEW PORTFOLIO</p>
+            <h2>创建投资组合</h2>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="关闭">×</button>
+        </div>
+        <label for="portfolio-name">组合名称</label>
+        <input id="portfolio-name" name="portfolio-name" required maxlength="24" placeholder="例如：红利低波实验" />
+        <label for="portfolio-description">投资思路</label>
+        <textarea id="portfolio-description" name="portfolio-description" rows="3" maxlength="100" placeholder="简单记录这个组合想验证的策略"></textarea>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button" id="cancel-create">取消</button>
+          <button class="button primary" value="default" type="submit">创建组合</button>
+        </div>
+      </form>
+    </dialog>
+
+    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+
