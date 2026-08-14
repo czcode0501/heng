@@ -84,6 +84,13 @@ class MacroDataContractTests(unittest.TestCase):
         self.assertGreaterEqual(summary["percentile"], 0)
         self.assertLessEqual(summary["percentile"], 100)
 
+    def test_stage_labels_are_specific_to_the_indicator_meaning(self):
+        points = [{"date": "2026-06", "value": 4.2}, {"date": "2026-07", "value": 4.1}]
+
+        self.assertEqual(summarize_series(points, stage_type="unemployment")["stage"], "就业总体平稳")
+        self.assertEqual(summarize_series(points, stage_type="policy_rate")["stage"], "政策利率偏高")
+        self.assertEqual(summarize_series(points, stage_type="real_yield")["stage"], "实际利率偏高")
+
     def test_market_builders_emit_source_backed_chart_contracts(self):
         china_payloads = {
             "money": self.eastmoney_payload("CURRENCY_SAME", [4 + index / 10 for index in range(15)]),
@@ -96,7 +103,7 @@ class MacroDataContractTests(unittest.TestCase):
             row["BASIC_CURRENCY_SAME"] = value
 
         bls_rows = []
-        for series_id, base in (("CUSR0000SA0", 300), ("CUSR0000SA0L1E", 310), ("CES0000000001", 157000), ("LNS14000000", 4)):
+        for series_id, base in (("CUUR0000SA0", 300), ("CUUR0000SA0L1E", 310), ("CES0000000001", 157000), ("LNS14000000", 4)):
             data = []
             for index in range(15):
                 data.append({"year": str(2024 + index // 12), "period": f"M{index % 12 + 1:02d}", "value": str(base + index)})

@@ -1,4 +1,4 @@
-const pending = (name) => ({ name, status: "pending" });
+const indicator = (id, name) => ({ id, name });
 
 export const macroMarkets = [
   {
@@ -12,27 +12,26 @@ export const macroMarkets = [
         title: "货币与信用",
         description: "观察流动性、信用扩张及金融条件。",
         indicators: [
-          pending("M1同比与3个月动量"),
-          pending("M2同比"),
-          pending("社会融资规模存量同比"),
-          pending("信用脉冲"),
-          pending("DR007－7天逆回购利率"),
+          indicator("cn-m1-yoy", "M1同比"),
+          indicator("cn-m2-yoy", "M2同比"),
         ],
       },
       {
         title: "增长周期",
         description: "识别生产、订单与企业盈利所处阶段。",
         indicators: [
-          pending("制造业PMI"),
-          pending("PMI新订单"),
-          pending("规模以上工业增加值"),
-          pending("工业企业利润"),
+          indicator("cn-pmi", "制造业PMI"),
+          indicator("cn-industrial-yoy", "规模以上工业增加值同比"),
         ],
       },
       {
         title: "通胀与盈利",
         description: "跟踪居民价格、工业价格与利润传导。",
-        indicators: [pending("CPI同比"), pending("核心CPI同比"), pending("PPI同比"), pending("PPI－CPI剪刀差")],
+        indicators: [
+          indicator("cn-cpi-yoy", "CPI同比"),
+          indicator("cn-ppi-yoy", "PPI同比"),
+          indicator("cn-ppi-cpi-gap", "PPI－CPI剪刀差"),
+        ],
       },
     ],
   },
@@ -46,22 +45,23 @@ export const macroMarkets = [
       {
         title: "通胀与美联储",
         description: "判断通胀粘性与货币政策压力。",
-        indicators: [pending("核心PCE同比"), pending("CPI同比"), pending("联邦基金目标利率")],
+        indicators: [
+          indicator("us-core-cpi-yoy", "核心CPI同比"),
+          indicator("us-cpi-yoy", "CPI同比"),
+          indicator("us-fed-funds", "联邦基金有效利率"),
+        ],
       },
       {
         title: "增长与就业",
         description: "跟踪经济动能与劳动力市场变化。",
-        indicators: [pending("ISM制造业PMI与新订单"), pending("非农就业"), pending("失业率"), pending("首次申请失业金人数")],
+        indicators: [indicator("us-payroll-change", "非农就业月增量"), indicator("us-unemployment", "失业率")],
       },
       {
         title: "金融条件",
         description: "观察利率、信用和美元对风险资产的约束。",
         indicators: [
-          pending("美国10年期实际利率"),
-          pending("10年－2年期限利差"),
-          pending("NFCI"),
-          pending("高收益债利差"),
-          pending("美元指数DXY"),
+          indicator("us-real-yield-10y", "美国10年期实际利率"),
+          indicator("us-curve-10y2y", "10年－2年期限利差"),
         ],
       },
     ],

@@ -1,7 +1,7 @@
 import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
 import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
 import { macroMarkets } from "./signals/macro/catalog.js";
-import { renderMacroWorkspace } from "./signals/macro/view.js";
+import { renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -55,6 +55,8 @@ let latestSearchResults = [];
 let searchTimer;
 let searchRequestId = 0;
 let analysisRequestId = 0;
+let macroRequestId = 0;
+let macroRefreshTimer;
 let activeAnalysisResult = null;
 
 const elements = {
@@ -236,7 +238,8 @@ function renderSignalDirectoryStructure(activeDirectory = null) {
 
 function renderSignalDetail(directory) {
   if (directory.id === "macro") {
-    elements.signalDetail.innerHTML = renderMacroWorkspace(macroMarkets);
+    elements.signalDetail.innerHTML = renderMacroWorkspaceLoading(macroMarkets);
+    loadMacroWorkspaceData();
     return;
   }
 
@@ -259,6 +262,33 @@ function renderSignalDetail(directory) {
         <div><dt>输出格式</dt><dd>待确定</dd></div>
       </dl>
     </section>`;
+}
+
+async function loadMacroWorkspaceData(force = false) {
+  const requestId = ++macroRequestId;
+  const refreshButton = elements.signalDetail.querySelector("[data-refresh-macro]");
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = force ? "正在检查…" : "正在连接…";
+  }
+  try {
+    const response = await fetch(`/api/macro${force ? "?refresh=1" : ""}`);
+    const payload = await response.json();
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== macroRequestId || route.directory !== "macro") return;
+    if (!response.ok) throw new Error(payload?.error?.message || "宏观数据读取失败");
+    if (!Array.isArray(payload?.data?.markets)) throw new Error("宏观数据返回格式不正确");
+    elements.signalDetail.innerHTML = renderMacroWorkspace(payload.data);
+    window.clearTimeout(macroRefreshTimer);
+    const refreshDelay = Math.max(60, Number(payload.data.refreshAfterSeconds) || 21600) * 1000;
+    macroRefreshTimer = window.setTimeout(() => {
+      if (resolveWorkspaceRoute(window.location.hash).directory === "macro") loadMacroWorkspaceData();
+    }, refreshDelay);
+  } catch (error) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== macroRequestId || route.directory !== "macro") return;
+    elements.signalDetail.innerHTML = renderMacroWorkspaceError(error.message || "数据源暂时不可用，请稍后重试", macroMarkets);
+  }
 }
 
 function setPrimaryNavigation(workspace) {
@@ -563,6 +593,10 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-refresh-macro]")) {
+    loadMacroWorkspaceData(true);
+    return;
+  }
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
 });
 window.addEventListener("hashchange", renderWorkspaceRoute);

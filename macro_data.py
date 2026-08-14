@@ -140,8 +140,34 @@ def _stage(value: float, stage_type: str) -> str:
         return "通胀偏高"
     if stage_type == "curve":
         return "曲线正常" if value >= 0 else "曲线倒挂"
+    if stage_type == "money":
+        return "货币同比扩张" if value >= 0 else "货币同比收缩"
+    if stage_type == "industrial":
+        return "工业扩张" if value >= 0 else "工业收缩"
+    if stage_type == "price_gap":
+        return "生产端价格更强" if value >= 0 else "消费端价格更强"
+    if stage_type == "payroll":
+        return "就业增加" if value >= 0 else "就业减少"
+    if stage_type == "unemployment":
+        if value < 4:
+            return "就业市场偏紧"
+        if value <= 5:
+            return "就业总体平稳"
+        return "就业走弱"
+    if stage_type == "policy_rate":
+        if value >= 4:
+            return "政策利率偏高"
+        if value >= 2:
+            return "政策利率中性偏高"
+        return "政策利率偏低"
+    if stage_type == "real_yield":
+        if value > 1:
+            return "实际利率偏高"
+        if value >= 0:
+            return "实际利率为正"
+        return "实际利率为负"
     if stage_type == "growth":
-        return "同比增长" if value >= 0 else "同比收缩"
+        return "正增长" if value >= 0 else "负增长"
     return "高于零轴" if value >= 0 else "低于零轴"
 
 
@@ -169,9 +195,14 @@ def summarize_series(points: list[dict], stage_type: str = "growth") -> dict:
     }
 
 
-CHINA_SOURCE = {
+CHINA_NBS_SOURCE = {
     "name": "东方财富数据中心",
-    "original": "国家统计局 / 中国人民银行",
+    "original": "原始口径：国家统计局",
+    "url": "https://data.eastmoney.com/cjsj/",
+}
+CHINA_PBOC_SOURCE = {
+    "name": "东方财富数据中心",
+    "original": "原始口径：中国人民银行",
     "url": "https://data.eastmoney.com/cjsj/",
 }
 BLS_SOURCE = {
@@ -228,13 +259,13 @@ def build_china_market(payloads: dict[str, dict]) -> dict:
         "title": "中国宏观环境",
         "status": "live",
         "indicators": [
-            _indicator("cn-m1-yoy", "货币与信用", "M1同比", m1, unit="%", frequency="月度", source=CHINA_SOURCE, stage_type="growth"),
-            _indicator("cn-m2-yoy", "货币与信用", "M2同比", m2, unit="%", frequency="月度", source=CHINA_SOURCE, stage_type="growth"),
-            _indicator("cn-pmi", "增长周期", "制造业PMI", pmi, unit="", frequency="月度", source=CHINA_SOURCE, stage_type="pmi", benchmark=50),
-            _indicator("cn-industrial-yoy", "增长周期", "规模以上工业增加值同比", industrial, unit="%", frequency="月度", source=CHINA_SOURCE, stage_type="growth"),
-            _indicator("cn-cpi-yoy", "通胀与盈利", "CPI同比", cpi, unit="%", frequency="月度", source=CHINA_SOURCE, stage_type="inflation"),
-            _indicator("cn-ppi-yoy", "通胀与盈利", "PPI同比", ppi, unit="%", frequency="月度", source=CHINA_SOURCE, stage_type="inflation"),
-            _indicator("cn-ppi-cpi-gap", "通胀与盈利", "PPI－CPI剪刀差", price_gap, unit="百分点", frequency="月度", source=CHINA_SOURCE, stage_type="growth"),
+            _indicator("cn-m1-yoy", "货币与信用", "M1同比", m1, unit="%", frequency="月度", source=CHINA_PBOC_SOURCE, stage_type="money"),
+            _indicator("cn-m2-yoy", "货币与信用", "M2同比", m2, unit="%", frequency="月度", source=CHINA_PBOC_SOURCE, stage_type="money"),
+            _indicator("cn-pmi", "增长周期", "制造业PMI", pmi, unit="", frequency="月度", source=CHINA_NBS_SOURCE, stage_type="pmi", benchmark=50),
+            _indicator("cn-industrial-yoy", "增长周期", "规模以上工业增加值同比", industrial, unit="%", frequency="月度", source=CHINA_NBS_SOURCE, stage_type="industrial"),
+            _indicator("cn-cpi-yoy", "通胀与盈利", "CPI同比", cpi, unit="%", frequency="月度", source=CHINA_NBS_SOURCE, stage_type="inflation"),
+            _indicator("cn-ppi-yoy", "通胀与盈利", "PPI同比", ppi, unit="%", frequency="月度", source=CHINA_NBS_SOURCE, stage_type="inflation"),
+            _indicator("cn-ppi-cpi-gap", "通胀与盈利", "PPI－CPI剪刀差", price_gap, unit="百分点", frequency="月度", source=CHINA_NBS_SOURCE, stage_type="price_gap"),
         ],
     }
 
@@ -242,8 +273,8 @@ def build_china_market(payloads: dict[str, dict]) -> dict:
 def build_us_market(bls_payload: dict, h15_csv: str) -> dict:
     bls = parse_bls_payload(bls_payload)
     h15 = parse_h15_csv(h15_csv)
-    cpi = year_over_year(bls["CUSR0000SA0"])
-    core_cpi = year_over_year(bls["CUSR0000SA0L1E"])
+    cpi = year_over_year(bls["CUUR0000SA0"])
+    core_cpi = year_over_year(bls["CUUR0000SA0L1E"])
     payroll_change = period_change(bls["CES0000000001"])
     unemployment = bls["LNS14000000"]
     fed_funds = h15["RIFSPFF_N.M"]
@@ -257,10 +288,10 @@ def build_us_market(bls_payload: dict, h15_csv: str) -> dict:
         "indicators": [
             _indicator("us-core-cpi-yoy", "通胀与美联储", "核心CPI同比", core_cpi, unit="%", frequency="月度", source=BLS_SOURCE, stage_type="inflation"),
             _indicator("us-cpi-yoy", "通胀与美联储", "CPI同比", cpi, unit="%", frequency="月度", source=BLS_SOURCE, stage_type="inflation"),
-            _indicator("us-fed-funds", "通胀与美联储", "联邦基金有效利率", fed_funds, unit="%", frequency="月度均值", source=FED_SOURCE, stage_type="growth", benchmark=None),
-            _indicator("us-payroll-change", "增长与就业", "非农就业月增量", payroll_change, unit="千人", frequency="月度", source=BLS_SOURCE, stage_type="growth"),
-            _indicator("us-unemployment", "增长与就业", "失业率", unemployment, unit="%", frequency="月度", source=BLS_SOURCE, stage_type="growth", benchmark=None),
-            _indicator("us-real-yield-10y", "金融条件", "美国10年期实际利率", real_yield, unit="%", frequency="月度均值", source=FED_SOURCE, stage_type="growth"),
+            _indicator("us-fed-funds", "通胀与美联储", "联邦基金有效利率", fed_funds, unit="%", frequency="月度均值", source=FED_SOURCE, stage_type="policy_rate", benchmark=None),
+            _indicator("us-payroll-change", "增长与就业", "非农就业月增量", payroll_change, unit="千人", frequency="月度", source=BLS_SOURCE, stage_type="payroll"),
+            _indicator("us-unemployment", "增长与就业", "失业率", unemployment, unit="%", frequency="月度", source=BLS_SOURCE, stage_type="unemployment", benchmark=None),
+            _indicator("us-real-yield-10y", "金融条件", "美国10年期实际利率", real_yield, unit="%", frequency="月度均值", source=FED_SOURCE, stage_type="real_yield"),
             _indicator("us-curve-10y2y", "金融条件", "10年－2年期限利差", curve, unit="百分点", frequency="月度均值", source=FED_SOURCE, stage_type="curve"),
         ],
     }
@@ -318,7 +349,7 @@ def fetch_china_market() -> dict:
 def fetch_us_market() -> dict:
     current_year = datetime.now(timezone.utc).year
     bls_body = {
-        "seriesid": ["CUSR0000SA0", "CUSR0000SA0L1E", "CES0000000001", "LNS14000000"],
+        "seriesid": ["CUUR0000SA0", "CUUR0000SA0L1E", "CES0000000001", "LNS14000000"],
         "startyear": str(current_year - 3),
         "endyear": str(current_year),
     }
