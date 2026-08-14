@@ -7,11 +7,12 @@ import math
 import re
 import statistics
 import threading
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from macro_data import get_macro_dashboard
+from market_timing import apply_market_timing_range
 from market_timing_sources import get_market_timing_dashboard
 
 
@@ -27,6 +28,20 @@ def validate_search_query(value: str) -> str:
     if len(query) > 40:
         raise ValueError("搜索内容不能超过40个字符")
     return query
+
+
+def validate_market_timing_range(range_id: str, custom_start: str) -> tuple[str, str | None]:
+    selected = (range_id or "1m").strip().lower()
+    if selected not in {"1d", "1w", "1m", "3m", "1y", "custom"}:
+        raise ValueError("市场择时时间范围不受支持")
+    if selected != "custom":
+        return selected, None
+    if not custom_start:
+        raise ValueError("自定义市场择时范围需要起始日期")
+    parsed = date.fromisoformat(custom_start)
+    if parsed > date.today():
+        raise ValueError("自定义起始日期不能晚于今天")
+    return selected, parsed.isoformat()
 
 
 def baostock_code_to_yahoo(code: str) -> str:
@@ -293,7 +308,12 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/market-timing":
                 force = params.get("refresh", ["0"])[0] == "1"
-                data = get_market_timing_dashboard(force=force)
+                range_id, custom_start = validate_market_timing_range(
+                    params.get("range", ["1m"])[0], params.get("start", [""])[0]
+                )
+                data = apply_market_timing_range(
+                    get_market_timing_dashboard(force=force), range_id, custom_start
+                )
                 self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/health":

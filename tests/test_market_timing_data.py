@@ -4,6 +4,7 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from market_timing import (
+    apply_market_timing_range,
     build_china_market,
     build_us_market,
 )
@@ -64,6 +65,28 @@ class MarketTimingContractTests(unittest.TestCase):
         self.assertEqual(len(history), 260)
         self.assertEqual(history[0], {"date": rising[0]["date"], "value": rising[0]["close"]})
         self.assertEqual(market["benchmark"]["availableFrom"], rising[0]["date"])
+
+    def test_selected_range_recalculates_dimensions_and_combined_regime(self):
+        rising = make_series(3_000, 4)
+        late_drop = [dict(point) for point in rising]
+        late_drop[-1]["close"] *= 0.88
+        late_drop[-1]["open"] = late_drop[-1]["close"]
+        late_drop[-1]["high"] = late_drop[-1]["close"]
+        late_drop[-1]["low"] = late_drop[-1]["close"]
+        market = build_china_market(
+            {key: late_drop for key in ["csi300", "sse", "szse", "chinext", "csi1000"]},
+            source={"name": "BaoStock", "mode": "zero-config"},
+        )
+        dashboard = {"markets": [market], "methodologyVersion": "1.0.0"}
+
+        one_day = apply_market_timing_range(dashboard, "1d")["markets"][0]
+        one_year = apply_market_timing_range(dashboard, "1y")["markets"][0]
+
+        self.assertLess(one_day["dimensions"][0]["score"], one_year["dimensions"][0]["score"])
+        self.assertNotEqual(one_day["regime"]["score"], one_year["regime"]["score"])
+        self.assertEqual(one_day["analysisWindow"]["range"], "1d")
+        self.assertEqual(one_day["analysisWindow"]["observations"], 2)
+        self.assertNotIn("_evidenceSeries", one_day)
 
     def test_us_market_uses_vix_equal_weight_and_credit_risk_proxies(self):
         rising = make_series(400, 1.2)

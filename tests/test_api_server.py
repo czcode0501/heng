@@ -5,6 +5,7 @@ from api_server import (
     calculate_technical_snapshot,
     normalize_baostock_row,
     normalize_yahoo_quote,
+    validate_market_timing_range,
     validate_search_query,
 )
 
@@ -47,6 +48,14 @@ class SearchContractTests(unittest.TestCase):
             validate_search_query("   ")
         with self.assertRaises(ValueError):
             validate_search_query("x" * 41)
+
+    def test_market_timing_range_requires_a_valid_custom_start(self):
+        self.assertEqual(validate_market_timing_range("1m", ""), ("1m", None))
+        self.assertEqual(validate_market_timing_range("custom", "2026-01-05"), ("custom", "2026-01-05"))
+        with self.assertRaises(ValueError):
+            validate_market_timing_range("custom", "")
+        with self.assertRaises(ValueError):
+            validate_market_timing_range("2y", "")
 
     def test_technical_snapshot_reports_trend_and_indicators(self):
         closes = [float(value) for value in range(101, 171)]
