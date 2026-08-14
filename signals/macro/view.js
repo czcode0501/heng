@@ -49,13 +49,12 @@ export function buildSparkline(points, { width = 360, height = 72, benchmark = n
   };
 }
 
-export function selectRangePoints(points, range) {
-  const safeRange = [12, 24, 60].includes(Number(range)) ? Number(range) : 24;
-  return (points || []).slice(-safeRange);
+export function selectRangePoints(points, range = "1m", customStart = "") {
+  return selectSignalTimeRange(points, { range, customStart }).points;
 }
 
-export function summarizeMacroRange(points, range) {
-  const selected = selectRangePoints(points, range);
+export function summarizeMacroRange(points, range, customStart = "") {
+  const selected = selectRangePoints(points, range, customStart);
   if (!selected.length) return null;
   const start = selected[0];
   const end = selected.at(-1);
@@ -108,10 +107,10 @@ function renderTrendChart(indicator, points) {
   </figure>`;
 }
 
-function renderIndicator(indicator, range) {
+function renderIndicator(indicator, range, customStart) {
   const summary = indicator.summary;
-  const points = selectRangePoints(indicator.points, range);
-  const period = summarizeMacroRange(indicator.points, range);
+  const points = selectRangePoints(indicator.points, range, customStart);
+  const period = summarizeMacroRange(indicator.points, range, customStart);
   const latestValue = Number(points.at(-1)?.value);
   const percentile = Math.round((points.filter(({ value }) => Number(value) <= latestValue).length / points.length) * 100);
   const change = summary.change === null ? "暂无上期比较" : `较上期 ${summary.change > 0 ? "+" : ""}${formatNumber(summary.change)}${indicator.unit}`;
@@ -137,12 +136,12 @@ function renderIndicator(indicator, range) {
   </article>`;
 }
 
-function renderMarketPanel(market, range) {
+function renderMarketPanel(market, range, customStart) {
   const statusText = market.status === "live" ? "真实数据已连接" : market.status === "stale" ? "显示上次成功数据" : "数据连接失败";
   const grouped = Map.groupBy(market.indicators || [], (indicator) => indicator.group);
   const body = market.status === "error"
     ? `<div class="macro-source-error" role="alert"><strong>暂时无法读取${escapeHtml(market.title)}数据</strong><p>${escapeHtml(market.error)}</p><button class="button secondary" type="button" data-refresh-macro>重新检查</button></div>`
-    : [...grouped].map(([group, indicators]) => `<section class="macro-live-group"><header><h3>${escapeHtml(group)}</h3><span>${indicators.length} 项指标</span></header><div class="macro-metric-list">${indicators.map((indicator) => renderIndicator(indicator, range)).join("")}</div></section>`).join("");
+    : [...grouped].map(([group, indicators]) => `<section class="macro-live-group"><header><h3>${escapeHtml(group)}</h3><span>${indicators.length} 项指标</span></header><div class="macro-metric-list">${indicators.map((indicator) => renderIndicator(indicator, range, customStart)).join("")}</div></section>`).join("");
   return `<article class="macro-market-panel ${escapeHtml(market.id)}" aria-labelledby="macro-${escapeHtml(market.id)}-title">
     <header class="macro-market-header">
       <span class="market-code" aria-hidden="true">${escapeHtml(market.code)}</span>
@@ -198,15 +197,8 @@ function renderMarketAnalysis(market) {
   </article>`;
 }
 
-function renderRangeControl(range) {
-  const options = [{ value: 12, label: "1年" }, { value: 24, label: "2年" }, { value: 60, label: "5年" }];
-  return `<section class="macro-range-bar" aria-label="走势图显示设置">
-    <div><span>走势图范围</span><strong>统一观察窗口</strong></div>
-    <div class="macro-range-control" role="group" aria-label="选择走势图时间范围">
-      ${options.map((option) => `<button type="button" data-macro-range="${option.value}" aria-pressed="${Number(range) === option.value}">${option.label}</button>`).join("")}
-    </div>
-    <p>控制下方全部原始指标：切换后重新计算区间起点、变化、高低值和分位；当前值始终代表最新数据。</p>
-  </section>`;
+function renderRangeControl(range, customStart) {
+  return `${renderSignalTimeRangeControl({ range, customStart, scope: "macro" })}<p class="macro-window-note">控制下方全部原始指标：切换后重新计算区间起点、变化、高低值和分位；低频月度数据在短窗口内使用最近两次发布值。</p>`;
 }
 
 function renderWorkspaceHeader(data) {
@@ -219,7 +211,7 @@ function renderWorkspaceHeader(data) {
     </header>`;
 }
 
-export function renderMacroWorkspace(data, { range = 24 } = {}) {
+export function renderMacroWorkspace(data, { range = "1m", customStart = "" } = {}) {
   const counts = Object.fromEntries(data.markets.map((market) => [market.id, market.indicators?.length || 0]));
   return `${renderWorkspaceHeader(data)}
     <section class="macro-separation-note" aria-label="宏观数据更新状态">
@@ -228,9 +220,9 @@ export function renderMacroWorkspace(data, { range = 24 } = {}) {
       <div><span>美国数据</span><strong>${counts["united-states"] || 0} 项已连接</strong></div>
     </section>
     <section class="macro-analysis-grid" aria-label="中国与美国宏观环境综合研判">${data.markets.map(renderMarketAnalysis).join("")}</section>
-    ${renderRangeControl(range)}
+    ${renderRangeControl(range, customStart)}
     <header class="macro-raw-data-heading"><div><span>RAW INDICATORS</span><h2>原始指标与走势</h2></div><p>模型结论来自下列实时指标；保留原始数据便于逐项核验。</p></header>
-    <section class="macro-market-grid" aria-label="中国与美国宏观指标">${data.markets.map((market) => renderMarketPanel(market, range)).join("")}</section>`;
+    <section class="macro-market-grid" aria-label="中国与美国宏观指标">${data.markets.map((market) => renderMarketPanel(market, range, customStart)).join("")}</section>`;
 }
 
 export function renderMacroWorkspaceLoading(markets) {
@@ -240,3 +232,4 @@ export function renderMacroWorkspaceLoading(markets) {
 export function renderMacroWorkspaceError(message, markets) {
   return `${renderWorkspaceHeader({ quality: { status: "error" } })}<div class="macro-source-error workspace-error" role="alert"><strong>宏观数据暂时无法加载</strong><p>${escapeHtml(message)}</p><button class="button secondary" type="button" data-refresh-macro>重新检查</button></div><section class="macro-market-grid" aria-hidden="true">${markets.map((market) => `<article class="macro-market-panel ${escapeHtml(market.id)} skeleton-panel"></article>`).join("")}</section>`;
 }
+import { renderSignalTimeRangeControl, selectSignalTimeRange } from "../time-range.js";

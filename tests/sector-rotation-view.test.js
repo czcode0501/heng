@@ -59,9 +59,9 @@ const payload = {
 
 test("sector range selects the requested trading window and hover resolves exact date", () => {
   const selected = selectSectorRange(history(), "3m");
-  assert.equal(selected.length, 66);
+  assert.equal(selected[0].date, "2026-02-20");
   const point = getSectorRotationChartPoint(selected, 0.5);
-  assert.equal(point.index, 33);
+  assert.equal(point.index, 45);
   assert.match(point.date, /^2026-\d{2}-\d{2}$/);
   assert.equal(typeof point.changePercent, "number");
 });
@@ -74,7 +74,7 @@ test("sector rotation renders independent China and US workspaces with ranking a
 
   assert.match(html, /中国股票/);
   assert.match(html, /美国股票/);
-  assert.match(html, /data-sector-range="3m"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-signal-range="3m"[^>]*aria-pressed="true"/);
   assert.match(html, /轮动排名/);
   assert.match(html, /六维证据/);
   assert.match(html, /相对动量/);

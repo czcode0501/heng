@@ -1,3 +1,5 @@
+import { renderSignalTimeRangeControl, selectSignalTimeRange, signalTimeRangeLabel } from "../time-range.js";
+
 const PERIODS = [
   { id: "1d", label: "1日" },
   { id: "5d", label: "5日" },
@@ -78,15 +80,46 @@ export function getCapitalFlowChartPoint(history, ratio) {
 
 function chartPath(points, width = 500, height = 128) {
   if (points.length < 2) return "";
-  const values = points.map(({ value }) => value);
-  const low = Math.min(...values);
-  const high = Math.max(...values);
-  const span = high - low || 1;
   return points.map(({ value }, index) => {
     const x = index / (points.length - 1) * width;
-    const y = height - (value - low) / span * height;
+    const y = height - Math.max(0, Math.min(100, value)) / 100 * height;
     return `${index ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(" ");
+}
+
+export function summarizeCapitalFlowRange(history, options = {}) {
+  const selection = selectSignalTimeRange(cleanHistory(history), options);
+  const points = selection.points;
+  if (!points.length) return null;
+  const values = points.map(({ value }) => Number(value));
+  const endValue = values.at(-1);
+  const positive = endValue >= 50;
+  let streak = 0;
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    if ((values[index] >= 50) !== positive) break;
+    streak += 1;
+  }
+  const percentile = Math.round(values.filter((value) => value <= endValue).length / values.length * 100);
+  const state = endValue >= 60
+    ? { id: "strong-inflow", label: "资金明确流入", tone: "positive" }
+    : endValue >= 50
+      ? { id: "mild-inflow", label: "资金温和流入", tone: "positive" }
+      : endValue <= 40
+        ? { id: "strong-outflow", label: "资金明确流出", tone: "negative" }
+        : { id: "mild-outflow", label: "资金偏弱 / 观察", tone: "neutral" };
+  return {
+    ...selection,
+    startValue: values[0],
+    endValue,
+    change: Number((endValue - values[0]).toFixed(2)),
+    high: Math.max(...values),
+    low: Math.min(...values),
+    percentile,
+    inflowShare: Math.round(values.filter((value) => value >= 50).length / values.length * 100),
+    streak,
+    streakDirection: positive ? "流入" : "流出",
+    state,
+  };
 }
 
 function renderHeader(status, checkedAt) {
@@ -97,11 +130,8 @@ function renderHeader(status, checkedAt) {
     </header>`;
 }
 
-function renderControls(period) {
-  return `<section class="capital-control-bar" aria-label="资金流观察周期">
-    <div><span>OBSERVATION WINDOW</span><strong>统一观察周期</strong><small>列表对比列与指标高亮跟随所选周期；综合分和价量状态使用 1/5/20 日加权证据。</small></div>
-    <div class="capital-period-control" role="group" aria-label="选择资金流周期">${PERIODS.map(({ id, label }) => `<button type="button" data-capital-period="${id}" aria-pressed="${period === id}">${label}</button>`).join("")}</div>
-  </section>`;
+function renderControls(options) {
+  return `${renderSignalTimeRangeControl({ ...options, scope: "capital-flow" })}<p class="capital-window-note">观察窗口控制走势图、历史分位和“起点—今天”比较；下方九项证据固定使用 1 / 5 / 20 日模型窗口，便于审计。</p>`;
 }
 
 function renderSummary(market) {
@@ -116,24 +146,26 @@ function renderSummary(market) {
   </article>`;
 }
 
-function renderRanking(market, activeId, period) {
+function renderRanking(market, activeId) {
   return `<section class="capital-ranking"><header><div><span>FLOW RANKING</span><h4>板块资金排名</h4></div><p>点击板块查看九项证据</p></header>
-    <div class="capital-table-wrap"><table><thead><tr><th>排名</th><th>板块</th><th>综合资金分</th><th>${period.toUpperCase()} Flow %</th><th>价格</th><th>价量状态</th><th>轮动排名</th><th></th></tr></thead><tbody>
+    <div class="capital-table-wrap"><table><thead><tr><th>排名</th><th>板块</th><th>综合资金分</th><th>20D Flow %</th><th>20D 价格</th><th>价量状态</th><th>轮动排名</th><th></th></tr></thead><tbody>
     ${(market.sectors || []).map((sector) => {
       const flow = sector.capitalFlow || {};
-      const flowRatio = flow.metrics?.flowRatio?.[period];
-      const price = flow.metrics?.priceChange?.[period];
+      const flowRatio = flow.metrics?.flowRatio?.["20d"];
+      const price = flow.metrics?.priceChange?.["20d"];
       return `<tr class="${sector.id === activeId ? "active" : ""}"><td><strong>${sector.flowRank}</strong></td><td><b>${escapeHtml(sector.title)}</b><small>${escapeHtml(sector.symbol)}</small></td><td><strong class="${scoreTone(flow.score)}">${Number(flow.score).toFixed(1)}</strong></td><td class="${finite(flowRatio) >= 0 ? "positive" : "negative"}">${formatMetric(flowRatio, "%")}</td><td class="${finite(price) >= 0 ? "positive" : "negative"}">${formatMetric(price, "%")}</td><td><span class="capital-state ${escapeHtml(flow.state?.tone || "neutral")}">${escapeHtml(flow.state?.label)}</span></td><td>${sector.rotation?.rank || "—"}<small>${escapeHtml(sector.rotation?.phase?.label || "")}</small></td><td><button type="button" data-capital-select="${escapeHtml(sector.id)}" data-capital-market="${escapeHtml(market.id)}">查看</button></td></tr>`;
     }).join("")}</tbody></table></div>
   </section>`;
 }
 
-function renderFlowChart(flow, title) {
-  const points = cleanHistory(flow.history);
-  const latest = points.at(-1);
-  return `<figure class="capital-flow-chart"><figcaption><div><span>方向压力走势</span><strong class="${scoreTone(latest?.value)}">${latest ? latest.value.toFixed(1) : "—"}</strong></div><small>50 为中性线；鼠标移动或使用左右方向键查看具体日期</small></figcaption>
-    <div class="capital-chart-shell"><svg viewBox="0 0 500 128" role="application" tabindex="0" data-capital-flow-chart data-chart-points="${escapeHtml(JSON.stringify(points))}" aria-label="${escapeHtml(title)}资金压力走势图"><line class="capital-chart-neutral" x1="0" x2="500" y1="64" y2="64"></line><path class="capital-chart-line" d="${chartPath(points)}"></path><line class="capital-chart-cursor" x1="0" x2="0" y1="0" y2="128"></line><circle class="capital-chart-dot" cx="0" cy="0" r="4"></circle><rect class="capital-chart-hit-zone" width="500" height="128"></rect></svg><div class="capital-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div></div>
-    <footer><span>${escapeHtml(points[0]?.date || "—")}</span><span>流出 0 ← 50 → 100 流入</span><span>${escapeHtml(latest?.date || "—")}</span></footer></figure>`;
+function renderFlowChart(flow, title, options) {
+  const summary = summarizeCapitalFlowRange(flow.history, options);
+  const points = summary?.points || [];
+  const change = summary?.change || 0;
+  return `<figure class="capital-flow-chart"><figcaption><div><span>资金到场证据 · ${escapeHtml(signalTimeRangeLabel(options.range, options.customStart))}</span><strong class="${scoreTone(summary?.endValue)}">${summary ? summary.endValue.toFixed(1) : "—"}</strong></div><small>${escapeHtml(summary?.state.label || "等待数据")}；固定 0–100 标尺，鼠标或方向键查看日期</small></figcaption>
+    <div class="capital-chart-shell"><svg viewBox="0 0 500 128" role="application" tabindex="0" data-capital-flow-chart data-chart-points="${escapeHtml(JSON.stringify(points))}" aria-label="${escapeHtml(title)}资金压力走势图，固定零到一百分标尺"><rect class="capital-flow-zone inflow" x="0" y="0" width="500" height="51.2"></rect><rect class="capital-flow-zone neutral" x="0" y="51.2" width="500" height="25.6"></rect><rect class="capital-flow-zone outflow" x="0" y="76.8" width="500" height="51.2"></rect><line class="capital-chart-threshold" x1="0" x2="500" y1="51.2" y2="51.2"></line><line class="capital-chart-neutral" x1="0" x2="500" y1="64" y2="64"></line><line class="capital-chart-threshold" x1="0" x2="500" y1="76.8" y2="76.8"></line><path class="capital-chart-line" d="${chartPath(points)}"></path><line class="capital-chart-cursor" x1="0" x2="0" y1="0" y2="128"></line><circle class="capital-chart-dot" cx="0" cy="0" r="4"></circle><rect class="capital-chart-hit-zone" width="500" height="128"></rect></svg><div class="capital-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div></div>
+    <dl class="capital-range-facts"><div><dt>起点 → 最新</dt><dd>${escapeHtml(summary?.startDate || "—")} · ${summary?.startValue?.toFixed(1) || "—"} → ${summary?.endValue?.toFixed(1) || "—"}</dd></div><div><dt>区间变化</dt><dd class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${change.toFixed(1)}</dd></div><div><dt>历史分位</dt><dd>${summary?.percentile ?? "—"}%</dd></div><div><dt>流入占比</dt><dd>${summary?.inflowShare ?? "—"}%</dd></div><div><dt>连续状态</dt><dd>${summary?.streak || 0}期${escapeHtml(summary?.streakDirection || "")}</dd></div></dl>
+    <footer><span>${escapeHtml(summary?.startDate || "—")}</span><span>≤40 流出 · 40–60 中性 · ≥60 流入</span><span>${escapeHtml(summary?.endDate || "—")}</span></footer></figure>`;
 }
 
 function renderComponents(flow) {
@@ -143,9 +175,9 @@ function renderComponents(flow) {
   }).join("")}</div></section>`;
 }
 
-function renderMatrix(flow, period) {
-  return `<section class="capital-matrix"><header><div><span>LEGACY METHOD · AUDITABLE</span><h4>九项资金证据</h4></div><p>绝对净流额仅展示，不进入跨板块排名</p></header><div class="capital-matrix-wrap"><table><thead><tr><th>指标</th>${PERIODS.map(({ id, label }) => `<th class="${id === period ? "active" : ""}">${label}</th>`).join("")}<th>含义</th></tr></thead><tbody>
-    ${INDICATORS.map((indicator) => `<tr><td><strong>${indicator.label}</strong></td>${PERIODS.map(({ id }) => { const value = flow.metrics?.[indicator.id]?.[id]; return `<td class="${id === period ? "active" : ""} ${finite(value) >= 0 ? "positive" : "negative"}">${formatMetric(value, indicator.unit)}</td>`; }).join("")}<td><small>${indicator.note}</small></td></tr>`).join("")}</tbody></table></div></section>`;
+function renderMatrix(flow) {
+  return `<section class="capital-matrix"><header><div><span>LEGACY METHOD · AUDITABLE</span><h4>九项资金证据</h4></div><p>固定 1 / 5 / 20 日模型窗口；绝对净流额仅展示，不进入跨板块排名</p></header><div class="capital-matrix-wrap"><table><thead><tr><th>指标</th>${PERIODS.map(({ label }) => `<th>${label}</th>`).join("")}<th>含义</th></tr></thead><tbody>
+    ${INDICATORS.map((indicator) => `<tr><td><strong>${indicator.label}</strong></td>${PERIODS.map(({ id }) => { const value = flow.metrics?.[indicator.id]?.[id]; return `<td class="${finite(value) >= 0 ? "positive" : "negative"}">${formatMetric(value, indicator.unit)}</td>`; }).join("")}<td><small>${indicator.note}</small></td></tr>`).join("")}</tbody></table></div></section>`;
 }
 
 function renderFusion(sector) {
@@ -153,19 +185,22 @@ function renderFusion(sector) {
   return `<section class="capital-fusion"><div><span>PRICE × FLOW</span><h4>${escapeHtml(flow.state?.label)}</h4><p>价格告诉我们结果，资金证据用于判断这个结果是否获得成交量确认，或正在出现吸筹/派发背离。</p></div><div><span>FLOW × ROTATION</span><h4>资金确认 ${Number(flow.score).toFixed(1)} · 轮动 ${finite(sector.rotation?.score)?.toFixed(1) || "—"}</h4><p>资金流页面负责解释证据；板块轮动只接收一个 15% 的去重资金确认分。</p><a href="#signals/sector-rotation" data-reuse-sector-cache>打开板块轮动 →</a></div></section>`;
 }
 
-function renderDetail(sector, period) {
+function renderDetail(sector, marketId, options) {
   if (!sector) return "";
   const flow = sector.capitalFlow || {};
   return `<section class="capital-evidence"><header class="capital-evidence-header"><div><span>SECTOR FLOW EVIDENCE</span><h3>${escapeHtml(sector.title)} · 资金证据</h3><p>${escapeHtml(sector.instrument)} · ${escapeHtml(sector.symbol)}</p></div><div><strong class="${scoreTone(flow.score)}">${Number(flow.score).toFixed(1)}</strong><em class="${escapeHtml(flow.state?.tone || "neutral")}">${escapeHtml(flow.state?.label)}</em><small>置信度 ${Number(flow.confidence).toFixed(0)}%</small></div></header>
-    <div class="capital-evidence-grid">${renderFlowChart(flow, sector.title)}${renderComponents(flow)}</div>${renderMatrix(flow, period)}${renderFusion(sector)}
+    <div class="capital-evidence-grid">${renderFlowChart(flow, sector.title, options)}${renderComponents(flow)}</div>
+    <button class="capital-constituents-trigger" type="button" data-capital-constituents data-capital-market="${escapeHtml(marketId)}" data-capital-sector="${escapeHtml(sector.id)}">查看 ${escapeHtml(sector.title)} 成分股与个股资金证据 <span aria-hidden="true">→</span></button>
+    <div class="capital-constituents-host" data-capital-constituents-host="${escapeHtml(marketId)}:${escapeHtml(sector.id)}"></div>
+    ${renderMatrix(flow)}${renderFusion(sector)}
     <p class="capital-methodology-note">${escapeHtml(flow.methodologyNote)}</p></section>`;
 }
 
-function renderMarket(market, activeId, period) {
+function renderMarket(market, activeId, options) {
   if (!market.sectors?.length) return "";
   const active = market.sectors.find(({ id }) => id === activeId) || market.sectors[0];
   const meta = marketMeta(market.id);
-  return `<article class="capital-market-workspace ${meta.className}"><header class="capital-market-title"><div><span>${meta.code}</span><div><small>${meta.english}</small><h3>${escapeHtml(market.title)} · 板块资金流</h3></div></div><p>${escapeHtml(market.source?.name)} · 无需用户配置 API Key · ${escapeHtml(market.asOf)}</p></header>${renderRanking(market, active.id, period)}${renderDetail(active, period)}</article>`;
+  return `<article class="capital-market-workspace ${meta.className}"><header class="capital-market-title"><div><span>${meta.code}</span><div><small>${meta.english}</small><h3>${escapeHtml(market.title)} · 板块资金流</h3></div></div><p>${escapeHtml(market.source?.name)} · 无需用户配置 API Key · ${escapeHtml(market.asOf)}</p></header>${renderRanking(market, active.id)}${renderDetail(active, market.id, options)}</article>`;
 }
 
 export function getCapitalFlowRefreshDelay(payload) {
@@ -180,17 +215,49 @@ export function renderCapitalFlowWorkspaceError(message) {
   return `${renderHeader("数据连接失败", "—")}<section class="capital-page-error" role="alert"><strong>暂时无法生成资金流分析</strong><p>${escapeHtml(message)}</p><small>系统不会用演示数字替代真实行情。</small></section>`;
 }
 
+function renderConstituentCards(data, symbols, emptyMessage) {
+  const stocks = new Map((data.stocks || []).map((stock) => [stock.symbol, stock]));
+  const rows = (symbols || []).map((symbol) => stocks.get(symbol)).filter(Boolean);
+  if (!rows.length) return `<p class="capital-constituent-empty">${escapeHtml(emptyMessage)}</p>`;
+  return `<div class="capital-stock-grid">${rows.map((stock) => `<article class="capital-stock-card">
+    <header><div><strong>${escapeHtml(stock.symbol)}</strong><small>${escapeHtml(stock.name === stock.symbol ? "成分股" : stock.name)}</small></div><span class="capital-state ${escapeHtml(stock.state?.tone || "neutral")}">${escapeHtml(stock.state?.label || "混合")}</span></header>
+    <dl><div><dt>资金分</dt><dd class="${scoreTone(stock.flowScore)}">${Number(stock.flowScore).toFixed(1)}</dd></div><div><dt>20D Flow %</dt><dd class="${Number(stock.flowRatio) >= 0 ? "positive" : "negative"}">${formatMetric(stock.flowRatio, "%")}</dd></div><div><dt>所选区间</dt><dd class="${Number(stock.priceChange) >= 0 ? "positive" : "negative"}">${formatMetric(stock.priceChange, "%")}</dd></div></dl>
+    <footer><span>${Number(stock.close).toLocaleString("zh-CN", { maximumFractionDigits: 2 })}</span><small>截至 ${escapeHtml(stock.asOf)}</small></footer>
+  </article>`).join("")}</div>`;
+}
+
+export function renderCapitalConstituentsLoading(title = "该板块") {
+  return `<section class="capital-constituents-panel" aria-busy="true"><header><div><span>SECTOR HOLDINGS</span><h4>${escapeHtml(title)} · 正在读取成分股证据</h4></div></header><p class="capital-constituent-empty">首次打开会批量读取这个板块的公开日线；同一数据源会复用缓存。</p></section>`;
+}
+
+export function renderCapitalConstituentsError(message) {
+  return `<section class="capital-constituents-panel" role="alert"><header><div><span>SECTOR HOLDINGS</span><h4>成分股数据暂不可用</h4></div></header><p class="capital-constituent-empty">${escapeHtml(message)}</p></section>`;
+}
+
+export function renderCapitalConstituents(data) {
+  const groups = [
+    ["core", "核心成分", "沿用公开成分池顺序，观察驱动板块的核心公司"],
+    ["strongestInflow", "资金流入最强", "资金压力分最高，判断资金是否正在集中"],
+    ["strongestOutflow", "资金最弱 / 流出证据", "资金压力分最低，识别派发与风险来源；若均为流入，则表示相对最弱"],
+    ["movers", "区间涨跌最大", "按所选时间范围绝对涨跌排序，核对价格与资金是否一致"],
+  ];
+  return `<section class="capital-constituents-panel"><header><div><span>SECTOR HOLDINGS · ${escapeHtml(data.marketId === "china" ? "CN" : "US")}</span><h4>${escapeHtml(data.title)} · 成分股资金证据</h4><p>所选窗口 ${escapeHtml(data.range?.id)} · ${escapeHtml(data.source?.name)} · ${escapeHtml(data.source?.access)}</p></div><em>${(data.stocks || []).length} 只股票</em></header>
+    <p class="capital-pool-disclosure">成分范围：${escapeHtml(data.source?.constituentMode)}。美股池继承 sector-flow；A股为透明流动性代表股研究池，不冒充交易所实时官方权重。</p>
+    <div class="capital-constituent-groups">${groups.map(([id, title, note]) => `<section><header><div><h5>${title}</h5><p>${note}</p></div><span>TOP 10</span></header>${renderConstituentCards(data, data.groups?.[id], "当前没有足够数据")}</section>`).join("")}</div>
+  </section>`;
+}
+
 export function renderCapitalFlowWorkspace(payload, options = {}) {
   const markets = Array.isArray(payload?.markets) ? payload.markets : [];
-  const period = PERIODS.some(({ id }) => id === options.period) ? options.period : "20d";
+  const rangeOptions = { range: options.range || "1m", customStart: options.customStart || "" };
   const activeSectors = options.activeSectors || {};
   const liveCount = markets.filter(({ status }) => status === "live").length;
   const status = liveCount === markets.length && markets.length ? "数据通过" : liveCount ? "部分数据可用" : "等待可用数据";
   const generated = new Date(payload?.generatedAt);
   const checkedAt = Number.isNaN(generated.getTime()) ? "—" : `最近检查 ${generated.toLocaleString("zh-CN", { hour12: false })}`;
-  return `${renderHeader(status, checkedAt)}${renderControls(period)}
+  return `${renderHeader(status, checkedAt)}${renderControls(rangeOptions)}
     <section class="capital-summary-grid">${markets.map(renderSummary).join("")}</section>
     <section class="capital-method-strip"><strong>科学融合方式</strong><span>资金流独立解释方向与背离</span><i>→</i><span>压缩为一个资金确认分</span><i>→</i><span>以 15% 权重进入板块轮动</span></section>
-    <section class="capital-workspace-list">${markets.map((market) => renderMarket(market, activeSectors[market.id], period)).join("")}</section>
+    <section class="capital-workspace-list">${markets.map((market) => renderMarket(market, activeSectors[market.id], rangeOptions)).join("")}</section>
     <p class="capital-license-note">${escapeHtml(payload?.methodology?.disclaimer || "资金流为价格与成交量推算值，不代表真实机构订单。")} 默认使用公开收盘日线自动更新；免费数据源的授权与可用性可能变化。</p>`;
 }

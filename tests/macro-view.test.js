@@ -47,15 +47,15 @@ test("sparkline builds a finite path and an honest benchmark position", () => {
   assert.ok(chart.benchmarkY >= 0 && chart.benchmarkY <= 72);
 });
 
-test("time range keeps the latest requested observations", () => {
+test("time range follows the shared calendar window", () => {
   const points = Array.from({ length: 60 }, (_, index) => ({
     date: `${2021 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`,
     value: index,
   }));
 
-  assert.deepEqual(selectRangePoints(points, 12), points.slice(-12));
-  assert.deepEqual(selectRangePoints(points, 24), points.slice(-24));
-  assert.deepEqual(selectRangePoints(points, 60), points);
+  assert.deepEqual(selectRangePoints(points, "1d"), points.slice(-2));
+  assert.equal(selectRangePoints(points, "1m")[0].date, "2025-11");
+  assert.equal(selectRangePoints(points, "1y")[0].date, "2024-12");
 });
 
 test("range summary changes its start and interval movement with the selected window", () => {
@@ -64,17 +64,17 @@ test("range summary changes its start and interval movement with the selected wi
     value: 100 + index,
   }));
 
-  assert.deepEqual(summarizeMacroRange(points, 12), {
-    startDate: "2025-01",
+  assert.deepEqual(summarizeMacroRange(points, "1y"), {
+    startDate: "2024-12",
     endDate: "2025-12",
-    startValue: 148,
+    startValue: 147,
     endValue: 159,
-    change: 11,
+    change: 12,
     high: 159,
-    low: 148,
-    observations: 12,
+    low: 147,
+    observations: 13,
   });
-  assert.equal(summarizeMacroRange(points, 60).change, 59);
+  assert.equal(summarizeMacroRange(points, "custom", "2021-01-01").change, 59);
 });
 
 test("macro chart hover resolves the nearest period and value", () => {
@@ -95,14 +95,14 @@ test("macro workspace renders real values, stage, source, and trend chart", () =
       { id: "china", code: "CN", title: "中国宏观环境", status: "live", analysis, indicators: [indicator] },
       { id: "united-states", code: "US", title: "美国宏观环境", status: "live", analysis: { ...analysis, market: "united-states", regime: "晚周期降温" }, indicators: [{ ...indicator, id: "us-pmi", name: "美国示例指标" }] },
     ],
-  }, { range: 12 });
+  }, { range: "1m" });
 
   assert.match(html, /49\.2/);
   assert.match(html, /收缩区间/);
   assert.match(html, /<svg/);
   assert.match(html, /国家统计局/);
   assert.match(html, /自动更新/);
-  assert.match(html, /data-macro-range="12"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-signal-range="1m"[^>]*aria-pressed="true"/);
   assert.match(html, /data-macro-chart/);
   assert.match(html, /macro-chart-tooltip/);
   assert.match(html, /区间变化/);
@@ -110,8 +110,8 @@ test("macro workspace renders real values, stage, source, and trend chart", () =
   assert.match(html, /选择性进攻/);
   assert.match(html, /模型输出仅用于研究/);
   assert.doesNotMatch(html, /待接入|NaN|undefined/);
-  assert.ok(html.indexOf("macro-analysis-grid") < html.indexOf("macro-range-bar"));
-  assert.ok(html.indexOf("macro-range-bar") < html.indexOf("macro-raw-data-heading"));
+  assert.ok(html.indexOf("macro-analysis-grid") < html.indexOf("signal-time-range"));
+  assert.ok(html.indexOf("signal-time-range") < html.indexOf("macro-raw-data-heading"));
 });
 
 test("macro workspace explains a source failure instead of inventing data", () => {

@@ -1,9 +1,4 @@
-const RANGE_OPTIONS = [
-  { id: "1m", label: "1个月", points: 22 },
-  { id: "3m", label: "3个月", points: 66 },
-  { id: "6m", label: "6个月", points: 132 },
-  { id: "1y", label: "1年", points: 260 },
-];
+import { renderSignalTimeRangeControl, selectSignalTimeRange, signalTimeRangeLabel } from "../time-range.js";
 
 const DIMENSIONS = [
   { id: "relativeMomentum", label: "相对动量", weight: 30, note: "相对基准的 5/20/60/120 日表现" },
@@ -35,16 +30,11 @@ function signed(value, suffix = "") {
 }
 
 function rangeName(range) {
-  return RANGE_OPTIONS.find(({ id }) => id === range)?.label || "3个月";
+  return signalTimeRangeLabel(range);
 }
 
-export function selectSectorRange(history, range = "3m") {
-  const points = (Array.isArray(history) ? history : [])
-    .map(({ date, value }) => ({ date: String(date || "").slice(0, 10), value: Number(value) }))
-    .filter(({ date, value }) => /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(value))
-    .sort((left, right) => left.date.localeCompare(right.date));
-  const count = RANGE_OPTIONS.find(({ id }) => id === range)?.points || 66;
-  return points.slice(-count);
+export function selectSectorRange(history, range = "1m", customStart = "") {
+  return selectSignalTimeRange(history, { range, customStart }).points;
 }
 
 export function getSectorRotationChartPoint(points, ratio) {
@@ -85,11 +75,8 @@ function renderHeader(status, checkedAt) {
     </header>`;
 }
 
-function renderControls(range) {
-  return `<section class="sector-control-bar" aria-label="板块轮动控制">
-    <div><span>MODEL PROFILE</span><strong>平衡型 · 六维评分</strong><small>当前时间范围仅改变详情走势图；排名采用统一的 5/20/60/120 日模型。</small></div>
-    <div class="sector-range-control" role="group" aria-label="走势图时间范围">${RANGE_OPTIONS.map(({ id, label }) => `<button type="button" data-sector-range="${id}" aria-pressed="${range === id}">${label}</button>`).join("")}</div>
-  </section>`;
+function renderControls(range, customStart) {
+  return `${renderSignalTimeRangeControl({ range, customStart, scope: "sector-rotation" })}<p class="sector-window-note">时间范围控制详情走势图的起点对比；六维排名仍使用统一 5 / 20 / 60 / 120 日模型，避免切换窗口时改变方法定义。</p>`;
 }
 
 function renderSummary(market) {
@@ -144,9 +131,9 @@ function renderRanking(market, activeId) {
   </section>`;
 }
 
-function renderDetail(market, sector, range) {
+function renderDetail(market, sector, range, customStart) {
   if (!sector) return "";
-  const points = selectSectorRange(sector.history, range);
+  const points = selectSectorRange(sector.history, range, customStart);
   const { path, normalized } = chartGeometry(points);
   const start = points[0];
   const end = points.at(-1);
@@ -186,14 +173,14 @@ function renderUnavailable(market) {
   return `<article class="sector-summary-card ${meta.className} unavailable"><header><span class="market-code">${meta.code}</span><div><small>${meta.english}</small><h3>${escapeHtml(market.title)}</h3></div><em>连接失败</em></header><p>${escapeHtml(market.dataQuality?.issues?.[0] || "免费数据源暂时不可用，系统不会用演示数字替代真实行情。")}</p></article>`;
 }
 
-function renderMarketWorkspace(market, activeId, range) {
+function renderMarketWorkspace(market, activeId, range, customStart) {
   if (!market?.sectors?.length) return "";
   const active = market.sectors.find(({ id }) => id === activeId) || market.sectors[0];
   const meta = marketMeta(market.id);
   return `<article class="sector-market-workspace ${meta.className}">
     <header class="sector-market-title"><div><span>${meta.code}</span><div><small>${meta.english}</small><h3>${escapeHtml(market.title)} · 完整轮动</h3></div></div><p>${escapeHtml(market.source?.name)} · ${escapeHtml(market.source?.access)} · ${escapeHtml(market.asOf)}</p></header>
     <div class="sector-market-overview">${renderRotationMap(market)}${renderRanking(market, active.id)}</div>
-    ${renderDetail(market, active, range)}${renderChinaAuxiliary(market)}
+    ${renderDetail(market, active, range, customStart)}${renderChinaAuxiliary(market)}
     <p class="sector-source-note">数据说明：${escapeHtml(market.source?.notes || "公开收盘日线代理")} 板块轮动为研究模型，不构成投资建议。</p>
   </article>`;
 }
@@ -212,15 +199,16 @@ export function renderSectorRotationWorkspaceError(message) {
 
 export function renderSectorRotationWorkspace(payload, options = {}) {
   const markets = Array.isArray(payload?.markets) ? payload.markets : [];
-  const range = options.range || "3m";
+  const range = options.range || "1m";
+  const customStart = options.customStart || "";
   const activeSectors = options.activeSectors || {};
   const liveCount = markets.filter(({ status }) => status === "live").length;
   const status = liveCount === markets.length ? "数据通过" : liveCount ? "部分数据可用" : "等待可用数据";
   const generated = new Date(payload?.generatedAt);
   const checkedAt = Number.isNaN(generated.getTime()) ? "--" : `最近检查 ${generated.toLocaleString("zh-CN", { hour12: false })}`;
-  return `${renderHeader(status, checkedAt)}${renderControls(range)}
+  return `${renderHeader(status, checkedAt)}${renderControls(range, customStart)}
     <section class="sector-summary-grid" aria-label="中美板块轮动摘要">${markets.map(renderSummary).join("")}</section>
     <section class="sector-method-note"><strong>模型顺序</strong><span>市场择时决定总风险仓位</span><i>→</i><span>六维模型排列板块强弱</span><i>→</i><span>最多配置前三名，单板块上限 30%</span></section>
-    <section class="sector-workspace-list">${markets.map((market) => renderMarketWorkspace(market, activeSectors[market.id], range)).join("")}</section>
+    <section class="sector-workspace-list">${markets.map((market) => renderMarketWorkspace(market, activeSectors[market.id], range, customStart)).join("")}</section>
     <p class="sector-license-note">默认数据模式无需 API Key，适合本地研究与开源预览。Yahoo Finance 与 BaoStock 的公开接口可用性和授权边界可能变化，商业部署应替换为正式授权数据源。</p>`;
 }

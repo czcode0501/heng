@@ -21,6 +21,9 @@ import {
 import {
   getCapitalFlowChartPoint,
   getCapitalFlowRefreshDelay,
+  renderCapitalConstituents,
+  renderCapitalConstituentsError,
+  renderCapitalConstituentsLoading,
   renderCapitalFlowWorkspace,
   renderCapitalFlowWorkspaceError,
   renderCapitalFlowWorkspaceLoading,
@@ -80,23 +83,21 @@ let searchRequestId = 0;
 let analysisRequestId = 0;
 let macroRequestId = 0;
 let macroRefreshTimer;
-let macroTimeRange = 24;
 let latestMacroPayload = null;
 let marketTimingRequestId = 0;
 let marketTimingRefreshTimer;
 let latestMarketTimingPayload = null;
-let marketTimingRange = "1m";
-let marketTimingCustomStart = "";
 let sectorRotationRequestId = 0;
 let sectorRotationRefreshTimer;
 let latestSectorRotationPayload = null;
-let sectorRotationRange = "3m";
 const activeSectorRotationSectors = { china: null, "united-states": null };
 let capitalFlowRequestId = 0;
 let capitalFlowRefreshTimer;
 let latestCapitalFlowPayload = null;
-let capitalFlowPeriod = "20d";
+let signalTimeRange = "1m";
+let signalCustomStart = "";
 const activeCapitalFlowSectors = { china: null, "united-states": null };
+const capitalConstituentCache = new Map();
 let activeAnalysisResult = null;
 const signalPreloader = createSignalPreloader();
 
@@ -120,8 +121,8 @@ async function getPreloadedSignalWorkspace(id) {
 }
 
 function marketTimingRequestPath(force = false) {
-  const params = new URLSearchParams({ range: marketTimingRange });
-  if (marketTimingRange === "custom" && marketTimingCustomStart) params.set("start", marketTimingCustomStart);
+  const params = new URLSearchParams({ range: signalTimeRange });
+  if (signalTimeRange === "custom" && signalCustomStart) params.set("start", signalCustomStart);
   if (force) params.set("refresh", "1");
   return `/api/market-timing?${params.toString()}`;
 }
@@ -306,7 +307,7 @@ function renderSignalDirectoryStructure(activeDirectory = null) {
 function renderSignalDetail(directory) {
   if (directory.id === "macro") {
     elements.signalDetail.innerHTML = latestMacroPayload
-      ? renderMacroWorkspace(latestMacroPayload, { range: macroTimeRange })
+      ? renderMacroWorkspace(latestMacroPayload, { range: signalTimeRange, customStart: signalCustomStart })
       : renderMacroWorkspaceLoading(macroMarkets);
     loadMacroWorkspaceData();
     return;
@@ -314,15 +315,15 @@ function renderSignalDetail(directory) {
 
   if (directory.id === "market-timing") {
     elements.signalDetail.innerHTML = latestMarketTimingPayload
-      ? renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart })
+      ? renderMarketTimingWorkspace(latestMarketTimingPayload, { range: signalTimeRange, customStart: signalCustomStart })
       : renderMarketTimingWorkspaceLoading(marketTimingMarkets);
-    loadMarketTimingWorkspaceData();
+    loadMarketTimingWorkspaceData(false, false);
     return;
   }
 
   if (directory.id === "sector-rotation") {
     elements.signalDetail.innerHTML = latestSectorRotationPayload
-      ? renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors })
+      ? renderSectorRotationWorkspace(latestSectorRotationPayload, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeSectorRotationSectors })
       : renderSectorRotationWorkspaceLoading();
     loadSectorRotationWorkspaceData();
     return;
@@ -330,7 +331,7 @@ function renderSignalDetail(directory) {
 
   if (directory.id === "capital-flow") {
     elements.signalDetail.innerHTML = latestCapitalFlowPayload
-      ? renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors })
+      ? renderCapitalFlowWorkspace(latestCapitalFlowPayload, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeCapitalFlowSectors })
       : renderCapitalFlowWorkspaceLoading();
     loadCapitalFlowWorkspaceData();
     return;
@@ -379,7 +380,7 @@ async function loadMacroWorkspaceData(force = false, usePreload = true) {
     if (requestId !== macroRequestId || route.directory !== "macro") return;
     if (!Array.isArray(data?.markets)) throw new Error("宏观数据返回格式不正确");
     latestMacroPayload = data;
-    elements.signalDetail.innerHTML = renderMacroWorkspace(data, { range: macroTimeRange });
+    elements.signalDetail.innerHTML = renderMacroWorkspace(data, { range: signalTimeRange, customStart: signalCustomStart });
     window.clearTimeout(macroRefreshTimer);
     const refreshDelay = Math.max(60, Number(data.refreshAfterSeconds) || 21600) * 1000;
     macroRefreshTimer = window.setTimeout(() => {
@@ -411,7 +412,7 @@ async function loadMarketTimingWorkspaceData(force = false, usePreload = true) {
     if (requestId !== marketTimingRequestId || route.directory !== "market-timing") return;
     if (!Array.isArray(data?.markets)) throw new Error("市场择时数据返回格式不正确");
     latestMarketTimingPayload = data;
-    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(data, { range: marketTimingRange, customStart: marketTimingCustomStart });
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(data, { range: signalTimeRange, customStart: signalCustomStart });
     window.clearTimeout(marketTimingRefreshTimer);
     marketTimingRefreshTimer = window.setTimeout(() => {
       if (resolveWorkspaceRoute(window.location.hash).directory === "market-timing") loadMarketTimingWorkspaceData(false, false);
@@ -450,7 +451,7 @@ async function loadSectorRotationWorkspaceData(force = false, usePreload = true)
         activeSectorRotationSectors[market.id] = market.sectors[0].id;
       }
     }
-    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(data, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(data, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeSectorRotationSectors });
     window.clearTimeout(sectorRotationRefreshTimer);
     sectorRotationRefreshTimer = window.setTimeout(() => {
       if (resolveWorkspaceRoute(window.location.hash).directory === "sector-rotation") loadSectorRotationWorkspaceData(false, false);
@@ -487,7 +488,7 @@ async function loadCapitalFlowWorkspaceData(force = false, usePreload = true) {
     for (const market of data.markets) {
       if (!activeCapitalFlowSectors[market.id] && market.sectors?.length) activeCapitalFlowSectors[market.id] = market.sectors[0].id;
     }
-    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(data, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(data, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeCapitalFlowSectors });
     window.clearTimeout(capitalFlowRefreshTimer);
     capitalFlowRefreshTimer = window.setTimeout(() => {
       if (resolveWorkspaceRoute(window.location.hash).directory === "capital-flow") loadCapitalFlowWorkspaceData(false, false);
@@ -496,6 +497,45 @@ async function loadCapitalFlowWorkspaceData(force = false, usePreload = true) {
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== capitalFlowRequestId || route.directory !== "capital-flow") return;
     elements.signalDetail.innerHTML = renderCapitalFlowWorkspaceError(error.message || "免费数据源暂时不可用，请稍后重试");
+  }
+}
+
+async function loadCapitalSectorConstituents(marketId, sectorId, force = false) {
+  const host = elements.signalDetail.querySelector(`[data-capital-constituents-host="${marketId}:${sectorId}"]`);
+  if (!host) return;
+  const sector = latestCapitalFlowPayload?.markets?.find(({ id }) => id === marketId)?.sectors?.find(({ id }) => id === sectorId);
+  const key = `${marketId}:${sectorId}:${signalTimeRange}:${signalCustomStart}`;
+  host.innerHTML = renderCapitalConstituentsLoading(sector?.title || "该板块");
+  try {
+    let data = !force ? capitalConstituentCache.get(key) : null;
+    if (!data) {
+      const params = new URLSearchParams({ market: marketId, sector: sectorId, range: signalTimeRange });
+      if (signalTimeRange === "custom" && signalCustomStart) params.set("start", signalCustomStart);
+      if (force) params.set("refresh", "1");
+      const response = await fetch(`/api/capital-flow/constituents?${params.toString()}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || "成分股数据读取失败");
+      data = payload?.data;
+      capitalConstituentCache.set(key, data);
+    }
+    const currentHost = elements.signalDetail.querySelector(`[data-capital-constituents-host="${marketId}:${sectorId}"]`);
+    if (currentHost) currentHost.innerHTML = renderCapitalConstituents(data);
+  } catch (error) {
+    const currentHost = elements.signalDetail.querySelector(`[data-capital-constituents-host="${marketId}:${sectorId}"]`);
+    if (currentHost) currentHost.innerHTML = renderCapitalConstituentsError(error.message || "免费数据源暂时不可用");
+  }
+}
+
+function rerenderSignalWorkspaceForRange(scope) {
+  if (scope === "macro" && latestMacroPayload) {
+    elements.signalDetail.innerHTML = renderMacroWorkspace(latestMacroPayload, { range: signalTimeRange, customStart: signalCustomStart });
+  } else if (scope === "market-timing" && latestMarketTimingPayload) {
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: signalTimeRange, customStart: signalCustomStart });
+    loadMarketTimingWorkspaceData(false, false);
+  } else if (scope === "sector-rotation" && latestSectorRotationPayload) {
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(latestSectorRotationPayload, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeSectorRotationSectors });
+  } else if (scope === "capital-flow" && latestCapitalFlowPayload) {
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(latestCapitalFlowPayload, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeCapitalFlowSectors });
   }
 }
 
@@ -937,12 +977,8 @@ function showCapitalFlowChartPoint(chart, ratio) {
   const cursor = chart.querySelector(".capital-chart-cursor");
   const dot = chart.querySelector(".capital-chart-dot");
   if (!shell || !tooltip || !cursor || !dot) return;
-  const values = points.map(({ value }) => Number(value)).filter(Number.isFinite);
-  const minimum = Math.min(...values);
-  const maximum = Math.max(...values);
-  const span = maximum - minimum || 1;
   const x = points.length > 1 ? point.index / (points.length - 1) * 500 : 250;
-  const y = 128 - (point.value - minimum) / span * 128;
+  const y = 128 - Math.max(0, Math.min(100, point.value)) / 100 * 128;
   const percent = x / 500 * 100;
   cursor.setAttribute("x1", x.toFixed(2));
   cursor.setAttribute("x2", x.toFixed(2));
@@ -966,25 +1002,18 @@ function hideCapitalFlowChartPoint(chart) {
 }
 
 document.addEventListener("click", (event) => {
-  const timingRangeButton = event.target.closest("[data-market-timing-range]");
-  if (timingRangeButton && latestMarketTimingPayload) {
-    marketTimingRange = timingRangeButton.dataset.marketTimingRange || "1m";
-    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
-    elements.signalDetail.querySelector(`[data-market-timing-range="${marketTimingRange}"]`)?.focus();
-    loadMarketTimingWorkspaceData(false, false);
-    return;
-  }
-  const sectorRangeButton = event.target.closest("[data-sector-range]");
-  if (sectorRangeButton && latestSectorRotationPayload) {
-    sectorRotationRange = sectorRangeButton.dataset.sectorRange || "3m";
-    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
-    elements.signalDetail.querySelector(`[data-sector-range="${sectorRotationRange}"]`)?.focus();
+  const signalRangeButton = event.target.closest("[data-signal-range][data-signal-scope]");
+  if (signalRangeButton) {
+    signalTimeRange = signalRangeButton.dataset.signalRange || "1m";
+    const scope = signalRangeButton.dataset.signalScope;
+    rerenderSignalWorkspaceForRange(scope);
+    elements.signalDetail.querySelector(`[data-signal-range="${signalTimeRange}"]`)?.focus();
     return;
   }
   const sectorSelectButton = event.target.closest("[data-sector-select][data-sector-market]");
   if (sectorSelectButton && latestSectorRotationPayload) {
     activeSectorRotationSectors[sectorSelectButton.dataset.sectorMarket] = sectorSelectButton.dataset.sectorSelect;
-    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(latestSectorRotationPayload, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeSectorRotationSectors });
     elements.signalDetail.querySelector(`.sector-market-workspace.${sectorSelectButton.dataset.sectorMarket} .sector-evidence`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     return;
   }
@@ -992,29 +1021,21 @@ document.addEventListener("click", (event) => {
     loadSectorRotationWorkspaceData(true);
     return;
   }
-  const capitalPeriodButton = event.target.closest("[data-capital-period]");
-  if (capitalPeriodButton && latestCapitalFlowPayload) {
-    capitalFlowPeriod = capitalPeriodButton.dataset.capitalPeriod || "20d";
-    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
-    elements.signalDetail.querySelector(`[data-capital-period="${capitalFlowPeriod}"]`)?.focus();
-    return;
-  }
   const capitalSelectButton = event.target.closest("[data-capital-select][data-capital-market]");
   if (capitalSelectButton && latestCapitalFlowPayload) {
     activeCapitalFlowSectors[capitalSelectButton.dataset.capitalMarket] = capitalSelectButton.dataset.capitalSelect;
-    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(latestCapitalFlowPayload, { range: signalTimeRange, customStart: signalCustomStart, activeSectors: activeCapitalFlowSectors });
     elements.signalDetail.querySelector(`.capital-market-workspace.${capitalSelectButton.dataset.capitalMarket} .capital-evidence`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    loadCapitalSectorConstituents(capitalSelectButton.dataset.capitalMarket, capitalSelectButton.dataset.capitalSelect);
+    return;
+  }
+  const constituentButton = event.target.closest("[data-capital-constituents][data-capital-market][data-capital-sector]");
+  if (constituentButton) {
+    loadCapitalSectorConstituents(constituentButton.dataset.capitalMarket, constituentButton.dataset.capitalSector);
     return;
   }
   if (event.target.closest("[data-refresh-capital-flow]")) {
     loadCapitalFlowWorkspaceData(true);
-    return;
-  }
-  const rangeButton = event.target.closest("[data-macro-range]");
-  if (rangeButton && latestMacroPayload) {
-    macroTimeRange = Number(rangeButton.dataset.macroRange) || 24;
-    elements.signalDetail.innerHTML = renderMacroWorkspace(latestMacroPayload, { range: macroTimeRange });
-    elements.signalDetail.querySelector(`[data-macro-range="${macroTimeRange}"]`)?.focus();
     return;
   }
   if (event.target.closest("[data-refresh-macro]")) {
@@ -1024,13 +1045,13 @@ document.addEventListener("click", (event) => {
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
 });
 document.addEventListener("change", (event) => {
-  if (!event.target.matches("[data-market-timing-custom-start]") || !latestMarketTimingPayload) return;
-  marketTimingCustomStart = event.target.value;
-  if (!marketTimingCustomStart) return;
-  marketTimingRange = "custom";
-  elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
-  elements.signalDetail.querySelector("[data-market-timing-custom-start]")?.focus();
-  loadMarketTimingWorkspaceData(false, false);
+  if (!event.target.matches("[data-signal-custom-start][data-signal-scope]")) return;
+  signalCustomStart = event.target.value;
+  if (!signalCustomStart) return;
+  signalTimeRange = "custom";
+  const scope = event.target.dataset.signalScope;
+  rerenderSignalWorkspaceForRange(scope);
+  elements.signalDetail.querySelector("[data-signal-custom-start]")?.focus();
 });
 document.addEventListener("pointermove", (event) => {
   const chart = event.target.closest?.("[data-market-timing-chart]");

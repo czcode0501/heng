@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   getCapitalFlowChartPoint,
   renderCapitalFlowWorkspace,
+  summarizeCapitalFlowRange,
 } from "../signals/capital-flow/view.js";
 
 const windows = { "1d": 1.2, "5d": 3.4, "20d": 8.6 };
@@ -65,9 +66,27 @@ test("capital flow chart resolves exact dates for pointer interaction", () => {
   assert.equal(typeof point.value, "number");
 });
 
+test("capital flow range summary explains whether money arrived and its historical position", () => {
+  const history = [
+    { date: "2026-07-01", value: 35 },
+    { date: "2026-07-02", value: 45 },
+    { date: "2026-07-03", value: 55 },
+    { date: "2026-07-04", value: 65 },
+    { date: "2026-07-05", value: 75 },
+  ];
+  const summary = summarizeCapitalFlowRange(history, { range: "custom", customStart: "2026-07-02" });
+  assert.equal(summary.startValue, 45);
+  assert.equal(summary.endValue, 75);
+  assert.equal(summary.change, 30);
+  assert.equal(summary.percentile, 100);
+  assert.equal(summary.inflowShare, 75);
+  assert.equal(summary.streak, 3);
+  assert.equal(summary.state.id, "strong-inflow");
+});
+
 test("capital flow workspace keeps markets separate and renders the legacy nine-indicator matrix", () => {
   const html = renderCapitalFlowWorkspace(payload, {
-    period: "20d",
+    range: "1m",
     activeSectors: { china: "information-technology", "united-states": "energy" },
   });
 
@@ -79,8 +98,12 @@ test("capital flow workspace keeps markets separate and renders the legacy nine-
   assert.match(html, /涨跌量比/);
   assert.match(html, /MFI/);
   assert.match(html, /OBV/);
+  assert.match(html, /历史分位/);
+  assert.match(html, /data-capital-constituents/);
+  assert.match(html, /capital-flow-zone inflow/);
+  assert.match(html, /data-signal-range="1m"/);
   assert.match(html, /MFI<\/strong><\/td><td[^>]*>—<\/td>/);
-  assert.match(html, /data-capital-period="20d"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-signal-range="1m"[^>]*aria-pressed="true"/);
   assert.match(html, /data-capital-select="information-technology"/);
   assert.match(html, /data-capital-flow-chart/);
   assert.match(html, /上涨获资金确认/);

@@ -28,13 +28,7 @@ function sparklinePath(points, width = 300, height = 78) {
   }).join(" ");
 }
 
-export const marketTimingRanges = [
-  { id: "1d", label: "1日" },
-  { id: "1w", label: "1周" },
-  { id: "1m", label: "1月" },
-  { id: "3m", label: "3月" },
-  { id: "1y", label: "1年" },
-];
+export const marketTimingRanges = SIGNAL_TIME_RANGES.filter(({ id }) => id !== "custom");
 
 function shiftDate(dateText, range) {
   const date = new Date(`${dateText}T00:00:00Z`);
@@ -142,8 +136,7 @@ function formatIndex(value) {
 }
 
 function rangeLabel(options) {
-  if (options.range === "custom") return `自定义 · ${options.customStart || "选择起点"}`;
-  return marketTimingRanges.find(({ id }) => id === options.range)?.label || "1月";
+  return signalTimeRangeLabel(options.range, options.customStart);
 }
 
 function renderRangePanel(payload, options) {
@@ -152,13 +145,7 @@ function renderRangePanel(payload, options) {
   const ends = histories.map((history) => history.at(-1).date).sort();
   const minimum = starts[0] || "";
   const maximum = ends.at(-1) || "";
-  return `<section class="timing-range-panel" aria-labelledby="timing-range-title">
-    <div><span>PERFORMANCE WINDOW</span><h3 id="timing-range-title">选择对比时间</h3><p>从所选起点的首个有效交易日，与最新可用交易日比较；图表统一从 100 起步。</p></div>
-    <div class="timing-range-controls">
-      <div class="timing-range-presets" role="group" aria-label="市场择时时间范围">${marketTimingRanges.map(({ id, label }) => `<button type="button" data-market-timing-range="${id}" aria-pressed="${options.range === id}">${label}</button>`).join("")}</div>
-      <label class="timing-custom-range"><span>自定义起点</span><input type="date" min="${escapeHtml(minimum)}" max="${escapeHtml(maximum)}" value="${escapeHtml(options.customStart || "")}" data-market-timing-custom-start></label>
-    </div>
-  </section>`;
+  return renderSignalTimeRangeControl({ ...options, scope: "market-timing", minimum, maximum });
 }
 
 function renderMarket(market, options) {
@@ -252,3 +239,4 @@ export function renderMarketTimingWorkspace(payload, options = {}) {
     <section class="timing-market-grid" aria-label="中国股票与美国股票市场择时">${markets.map((market) => renderMarket(market, activeOptions)).join("")}</section>
     <p class="timing-license-note">默认免费源适合本地研究和个人使用。开源项目若进行商业化公开数据再分发，应按部署场景接入获得授权的数据供应商。</p>`;
 }
+import { SIGNAL_TIME_RANGES, renderSignalTimeRangeControl, signalTimeRangeLabel } from "../time-range.js";

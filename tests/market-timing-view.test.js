@@ -104,9 +104,9 @@ test("market timing workspace renders source-backed scores and automatic update 
   assert.match(html, /数据通过/);
   assert.match(html, /60%–80%/);
   assert.match(html, /Yahoo Finance via yfinance|yfinance/);
-  assert.match(html, /data-market-timing-range="1d"/);
-  assert.match(html, /data-market-timing-range="1y"/);
-  assert.match(html, /data-market-timing-custom-start/);
+  assert.match(html, /data-signal-range="1d"/);
+  assert.match(html, /data-signal-range="1y"/);
+  assert.match(html, /data-signal-custom-start/);
   assert.match(html, /区间变化/);
   assert.match(html, /data-market-timing-chart/);
   assert.match(html, /timing-chart-tooltip/);
