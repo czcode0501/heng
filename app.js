@@ -2,6 +2,8 @@ import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
 import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
 import { macroMarkets } from "./signals/macro/catalog.js";
 import { renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
+import { marketTimingMarkets } from "./signals/market-timing/catalog.js";
+import { renderMarketTimingWorkspace } from "./signals/market-timing/view.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -242,6 +244,11 @@ function renderSignalDetail(directory) {
   if (directory.id === "macro") {
     elements.signalDetail.innerHTML = renderMacroWorkspaceLoading(macroMarkets);
     loadMacroWorkspaceData();
+    return;
+  }
+
+  if (directory.id === "market-timing") {
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(marketTimingMarkets);
     return;
   }
 

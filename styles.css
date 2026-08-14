@@ -274,6 +274,43 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 .definition-list dt { color: var(--muted); }
 .definition-list dd { font-weight: 700; }
 
+.timing-detail-header p:last-child { max-width: 760px; }
+.timing-separation-note { display: grid; grid-template-columns: minmax(220px, .9fr) minmax(280px, 1.2fr) minmax(220px, .9fr); align-items: center; gap: 24px; margin-top: 20px; padding: 16px 20px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.timing-separation-note > div:first-child { color: var(--china-accent); }
+.timing-separation-note > div:last-child { color: var(--us-accent); text-align: right; }
+.timing-separation-note span, .timing-separation-note strong { display: block; }
+.timing-separation-note span { font-size: 10px; font-weight: 800; }
+.timing-separation-note strong { margin-top: 5px; color: var(--text); font-size: 12px; }
+.timing-separation-note p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; text-align: center; }
+.timing-market-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; margin-top: 16px; }
+.timing-market-panel { --market-accent: var(--muted); --market-soft: var(--surface-raised); --market-border: var(--border); min-width: 0; overflow: hidden; border: 1px solid var(--market-border); border-top: 3px solid var(--market-accent); border-radius: var(--radius-md); }
+.timing-market-panel.china { --market-accent: var(--china-accent); --market-soft: var(--china-soft); --market-border: var(--china-border); }
+.timing-market-panel.united-states { --market-accent: var(--us-accent); --market-soft: var(--us-soft); --market-border: var(--us-border); }
+.timing-market-header { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 20px; background: var(--market-soft); }
+.timing-market-header p, .timing-market-header h2 { margin: 0; }
+.timing-market-header p { color: var(--market-accent); font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.timing-market-header h2 { margin-top: 4px; font-size: 18px; }
+.timing-structure-status { padding: 5px 8px; color: var(--market-accent); border: 1px solid var(--market-border); border-radius: 4px; font-size: 9px; font-style: normal; font-weight: 800; white-space: nowrap; }
+.timing-market-body { padding: 20px; }
+.timing-market-description { min-height: 42px; margin: 0; color: var(--muted); font-size: 12px; line-height: 1.65; }
+.timing-section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-top: 20px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+.timing-section-heading span, .timing-next-steps header span { color: var(--market-accent); font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.timing-section-heading h3, .timing-next-steps h3 { margin: 4px 0 0; font-size: 13px; }
+.timing-section-heading > strong { color: var(--muted); font-size: 10px; }
+.timing-method-list { display: grid; gap: 1px; margin: 12px 0 0; padding: 0; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); list-style: none; }
+.timing-method-item { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 12px; min-height: 68px; padding: 12px; background: var(--surface-raised); }
+.timing-method-index { color: var(--market-accent); font-size: 10px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.timing-method-item h3, .timing-method-item p { margin: 0; }
+.timing-method-item h3 { font-size: 12px; }
+.timing-method-item p { margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.timing-method-item > em { padding: 4px 6px; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 4px; font-size: 9px; font-style: normal; font-weight: 800; }
+.timing-method-item > em.inherited { color: var(--market-accent); background: var(--market-soft); border-color: var(--market-border); }
+.timing-next-steps { margin-top: 20px; padding: 16px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.timing-next-steps header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.timing-next-steps ul { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; counter-reset: timing-step; }
+.timing-next-steps li { position: relative; padding-left: 18px; color: var(--muted); font-size: 10px; line-height: 1.5; counter-increment: timing-step; }
+.timing-next-steps li::before { position: absolute; left: 0; color: var(--market-accent); font-weight: 800; content: counter(timing-step) "."; }
+
 .macro-detail-header p:last-child { max-width: 760px; }
 .macro-toolbar { display: flex; align-items: center; gap: 8px; }
 .macro-toolbar .button { min-height: 34px; padding: 0 12px; white-space: nowrap; }
@@ -501,6 +538,10 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .definition-placeholder { grid-template-columns: 1fr; gap: 20px; padding: 32px 0 8px; }
   .placeholder-index { font-size: 40px; }
   .definition-list { grid-column: auto; }
+  .timing-separation-note { grid-template-columns: 1fr 1fr; gap: 12px; }
+  .timing-separation-note > div:last-child { text-align: right; }
+  .timing-separation-note > p { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+  .timing-market-grid { grid-template-columns: 1fr; }
   .macro-separation-note { grid-template-columns: 1fr 1fr; gap: 12px; }
   .macro-separation-note > div:last-child { text-align: right; }
   .macro-separation-note > i { display: none; }
@@ -532,6 +573,10 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .analysis-actions { width: 100%; }
   .analysis-actions .button { flex: 1; }
   .analysis-metrics { grid-template-columns: 1fr; }
+  .timing-market-header { grid-template-columns: auto minmax(0, 1fr); }
+  .timing-market-header .timing-structure-status { grid-column: 1 / -1; width: fit-content; }
+  .timing-method-item { grid-template-columns: 24px minmax(0, 1fr); }
+  .timing-method-item > em { grid-column: 2; width: fit-content; }
   .macro-market-header { grid-template-columns: auto minmax(0, 1fr); }
   .macro-range-bar { grid-template-columns: 1fr; }
   .macro-range-control { width: 100%; }

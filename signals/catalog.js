@@ -11,7 +11,7 @@ export const signalDirectories = [
     index: "02",
     title: "市场择时",
     english: "MARKET TIMING",
-    description: "市场时机相关信号的独立分析模块。具体周期、指标与输出规则等待定义。",
+    description: "中国股票与美国股票独立计算的市场时机分析模块。",
   },
   {
     id: "sector-rotation",
