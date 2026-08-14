@@ -2,6 +2,7 @@ import unittest
 
 from sector_rotation import (
     DIMENSION_WEIGHTS,
+    _assign_weights,
     build_sector_market,
     classify_rotation_phase,
 )
@@ -79,6 +80,10 @@ class SectorRotationModelTests(unittest.TestCase):
         self.assertLessEqual(sum(weights), 80)
         self.assertLessEqual(max(weights), 30)
         self.assertLessEqual(sum(weight > 0 for weight in weights), 3)
+        self.assertTrue(
+            all(sector["targetWeight"] > 0 or sector["action"]["id"] != "increase" for sector in market["sectors"]),
+            "a sector excluded by portfolio constraints must not still tell the user to increase it",
+        )
 
     def test_risk_off_market_produces_no_sector_allocation(self):
         benchmark = make_series(3_000, -1)
@@ -103,6 +108,17 @@ class SectorRotationModelTests(unittest.TestCase):
 
         self.assertEqual(market["timing"]["maxExposure"], 0)
         self.assertEqual(sum(sector["targetWeight"] for sector in market["sectors"]), 0)
+
+    def test_portfolio_cap_changes_an_unfunded_increase_signal_to_watchlist(self):
+        sectors = [
+            {"score": 90 - index, "confidence": 95, "action": {"id": "increase", "label": "增配"}}
+            for index in range(4)
+        ]
+
+        _assign_weights(sectors, 80)
+
+        self.assertEqual(sum(sector["targetWeight"] > 0 for sector in sectors), 3)
+        self.assertEqual(sectors[3]["action"], {"id": "watch", "label": "候补观察"})
 
     def test_rotation_phase_distinguishes_leading_overheated_repair_and_lagging(self):
         self.assertEqual(classify_rotation_phase(76, 4, 68, 0.8)["id"], "leading")

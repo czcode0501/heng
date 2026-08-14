@@ -260,13 +260,20 @@ def _assign_weights(sectors: list[dict], max_exposure: int) -> None:
     strength_sum = sum(max(sector["score"] - 50, 0) for sector in eligible)
     for sector in sectors:
         sector["targetWeight"] = 0.0
-    if not strength_sum or not max_exposure:
-        return
-    remaining = float(max_exposure)
-    for sector in eligible:
-        proposed = max_exposure * max(sector["score"] - 50, 0) / strength_sum
-        sector["targetWeight"] = round(min(30.0, proposed, remaining), 1)
-        remaining -= sector["targetWeight"]
+    if strength_sum and max_exposure:
+        remaining = float(max_exposure)
+        for sector in eligible:
+            proposed = max_exposure * max(sector["score"] - 50, 0) / strength_sum
+            sector["targetWeight"] = round(min(30.0, proposed, remaining), 1)
+            remaining -= sector["targetWeight"]
+
+    for sector in sectors:
+        if sector["targetWeight"] == 0 and sector["action"]["id"] in {"increase", "hold"}:
+            sector["action"] = (
+                {"id": "watch", "label": "风险关闭"}
+                if not max_exposure
+                else {"id": "watch", "label": "候补观察"}
+            )
 
 
 def build_sector_market(

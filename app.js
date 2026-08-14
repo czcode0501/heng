@@ -11,6 +11,13 @@ import {
   renderMarketTimingWorkspaceLoading,
   shouldRefreshMarketTimingNavigation,
 } from "./signals/market-timing/view.js";
+import {
+  getSectorRotationChartPoint,
+  getSectorRotationRefreshDelay,
+  renderSectorRotationWorkspace,
+  renderSectorRotationWorkspaceError,
+  renderSectorRotationWorkspaceLoading,
+} from "./signals/sector-rotation/view.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -74,6 +81,12 @@ let latestMarketTimingPayload = null;
 let marketTimingRange = "1m";
 let marketTimingCustomStart = "";
 let marketTimingForceOnNextRender = false;
+let sectorRotationRequestId = 0;
+let sectorRotationRefreshTimer;
+let latestSectorRotationPayload = null;
+let sectorRotationRange = "3m";
+let sectorRotationForceOnNextRender = false;
+const activeSectorRotationSectors = { china: null, "united-states": null };
 let activeAnalysisResult = null;
 
 function marketTimingRequestPath(force = false) {
@@ -277,6 +290,16 @@ function renderSignalDetail(directory) {
     return;
   }
 
+  if (directory.id === "sector-rotation") {
+    elements.signalDetail.innerHTML = latestSectorRotationPayload
+      ? renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors })
+      : renderSectorRotationWorkspaceLoading();
+    const force = sectorRotationForceOnNextRender;
+    sectorRotationForceOnNextRender = false;
+    loadSectorRotationWorkspaceData(force);
+    return;
+  }
+
   elements.signalDetail.innerHTML = `<a class="back-link" href="#signals">← 返回模型信号目录</a>
     <header class="signal-detail-header">
       <div><p class="eyebrow">${directory.english}</p><h2>${escapeHtml(directory.title)}</h2><p>${escapeHtml(directory.description)}</p></div>
@@ -350,6 +373,38 @@ async function loadMarketTimingWorkspaceData(force = false) {
   }
 }
 
+async function loadSectorRotationWorkspaceData(force = false) {
+  const requestId = ++sectorRotationRequestId;
+  const refreshButton = elements.signalDetail.querySelector("[data-refresh-sector-rotation]");
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = force ? "正在刷新…" : "正在检查…";
+  }
+  try {
+    const response = await fetch(`/api/sector-rotation${force ? "?refresh=1" : ""}`);
+    const payload = await response.json();
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== sectorRotationRequestId || route.directory !== "sector-rotation") return;
+    if (!response.ok) throw new Error(payload?.error?.message || "板块轮动数据读取失败");
+    if (!Array.isArray(payload?.data?.markets)) throw new Error("板块轮动数据返回格式不正确");
+    latestSectorRotationPayload = payload.data;
+    for (const market of payload.data.markets) {
+      if (!activeSectorRotationSectors[market.id] && market.sectors?.length) {
+        activeSectorRotationSectors[market.id] = market.sectors[0].id;
+      }
+    }
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(payload.data, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
+    window.clearTimeout(sectorRotationRefreshTimer);
+    sectorRotationRefreshTimer = window.setTimeout(() => {
+      if (resolveWorkspaceRoute(window.location.hash).directory === "sector-rotation") loadSectorRotationWorkspaceData();
+    }, getSectorRotationRefreshDelay(payload.data));
+  } catch (error) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== sectorRotationRequestId || route.directory !== "sector-rotation") return;
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspaceError(error.message || "免费数据源暂时不可用，请稍后重试");
+  }
+}
+
 function setPrimaryNavigation(workspace) {
   const isOverview = workspace === "overview";
   elements.navOverview.classList.toggle("active", isOverview);
@@ -370,6 +425,7 @@ function renderWorkspaceRoute() {
   setPrimaryNavigation(route.workspace);
   renderSignalDirectoryStructure(directory?.id || null);
   if (directory?.id !== "market-timing") window.clearTimeout(marketTimingRefreshTimer);
+  if (directory?.id !== "sector-rotation") window.clearTimeout(sectorRotationRefreshTimer);
 
   if (isOverview) {
     const portfolio = portfolios.find((item) => item.id === activePortfolioId);
@@ -740,7 +796,54 @@ function hideMacroChartPoint(chart) {
   if (tooltip) tooltip.hidden = true;
 }
 
+function showSectorRotationChartPoint(chart, ratio) {
+  const points = marketTimingChartPoints(chart);
+  const point = getSectorRotationChartPoint(points, ratio);
+  if (!point) return;
+  const shell = chart.closest(".sector-chart-shell");
+  const tooltip = shell?.querySelector(".sector-chart-tooltip");
+  const cursor = chart.querySelector(".sector-chart-cursor");
+  const dot = chart.querySelector(".sector-chart-dot");
+  if (!shell || !tooltip || !cursor || !dot) return;
+  const values = points.map(({ value }) => Number(value)).filter(Number.isFinite);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || 1;
+  const x = points.length > 1 ? point.index / (points.length - 1) * 520 : 260;
+  const y = 132 - (point.value - minimum) / span * 132;
+  const percent = x / 520 * 100;
+  cursor.setAttribute("x1", x.toFixed(2));
+  cursor.setAttribute("x2", x.toFixed(2));
+  dot.setAttribute("cx", x.toFixed(2));
+  dot.setAttribute("cy", y.toFixed(2));
+  tooltip.querySelector("strong").textContent = point.date;
+  tooltip.querySelector("span").textContent = `指数 ${point.value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+  tooltip.querySelector("em").textContent = `较区间起点 ${point.changePercent >= 0 ? "+" : ""}${point.changePercent.toFixed(2)}%`;
+  tooltip.hidden = false;
+  tooltip.classList.toggle("is-flipped", percent > 64);
+  shell.style.setProperty("--tooltip-x", `${percent}%`);
+  shell.classList.add("is-active");
+  chart.dataset.activeIndex = String(point.index);
+}
+
+function hideSectorRotationChartPoint(chart) {
+  const shell = chart.closest(".sector-chart-shell");
+  shell?.classList.remove("is-active");
+  const tooltip = shell?.querySelector(".sector-chart-tooltip");
+  if (tooltip) tooltip.hidden = true;
+}
+
 document.addEventListener("click", (event) => {
+  const sectorRotationNavigation = event.target.closest('a[href="#signals/sector-rotation"]');
+  if (sectorRotationNavigation) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (route.directory === "sector-rotation") {
+      event.preventDefault();
+      loadSectorRotationWorkspaceData(true);
+      return;
+    }
+    sectorRotationForceOnNextRender = true;
+  }
   const marketTimingNavigation = event.target.closest('a[href="#signals/market-timing"]');
   if (marketTimingNavigation) {
     const route = resolveWorkspaceRoute(window.location.hash);
@@ -757,6 +860,24 @@ document.addEventListener("click", (event) => {
     elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
     elements.signalDetail.querySelector(`[data-market-timing-range="${marketTimingRange}"]`)?.focus();
     loadMarketTimingWorkspaceData();
+    return;
+  }
+  const sectorRangeButton = event.target.closest("[data-sector-range]");
+  if (sectorRangeButton && latestSectorRotationPayload) {
+    sectorRotationRange = sectorRangeButton.dataset.sectorRange || "3m";
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
+    elements.signalDetail.querySelector(`[data-sector-range="${sectorRotationRange}"]`)?.focus();
+    return;
+  }
+  const sectorSelectButton = event.target.closest("[data-sector-select][data-sector-market]");
+  if (sectorSelectButton && latestSectorRotationPayload) {
+    activeSectorRotationSectors[sectorSelectButton.dataset.sectorMarket] = sectorSelectButton.dataset.sectorSelect;
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
+    elements.signalDetail.querySelector(`.sector-market-workspace.${sectorSelectButton.dataset.sectorMarket} .sector-evidence`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  if (event.target.closest("[data-refresh-sector-rotation]")) {
+    loadSectorRotationWorkspaceData(true);
     return;
   }
   const rangeButton = event.target.closest("[data-macro-range]");
@@ -793,6 +914,12 @@ document.addEventListener("pointermove", (event) => {
   const bounds = chart.getBoundingClientRect();
   showMacroChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
 });
+document.addEventListener("pointermove", (event) => {
+  const chart = event.target.closest?.("[data-sector-chart]");
+  if (!chart) return;
+  const bounds = chart.getBoundingClientRect();
+  showSectorRotationChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
+});
 document.addEventListener("pointerout", (event) => {
   const chart = event.target.closest?.("[data-market-timing-chart]");
   if (!chart || chart.contains(event.relatedTarget)) return;
@@ -803,17 +930,28 @@ document.addEventListener("pointerout", (event) => {
   if (!chart || chart.contains(event.relatedTarget)) return;
   hideMacroChartPoint(chart);
 });
+document.addEventListener("pointerout", (event) => {
+  const chart = event.target.closest?.("[data-sector-chart]");
+  if (!chart || chart.contains(event.relatedTarget)) return;
+  hideSectorRotationChartPoint(chart);
+});
 document.addEventListener("focusin", (event) => {
   if (event.target.matches?.("[data-market-timing-chart]")) showMarketTimingChartPoint(event.target, 1);
 });
 document.addEventListener("focusin", (event) => {
   if (event.target.matches?.("[data-macro-chart]")) showMacroChartPoint(event.target, 1);
 });
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches?.("[data-sector-chart]")) showSectorRotationChartPoint(event.target, 1);
+});
 document.addEventListener("focusout", (event) => {
   if (event.target.matches?.("[data-market-timing-chart]")) hideMarketTimingChartPoint(event.target);
 });
 document.addEventListener("focusout", (event) => {
   if (event.target.matches?.("[data-macro-chart]")) hideMacroChartPoint(event.target);
+});
+document.addEventListener("focusout", (event) => {
+  if (event.target.matches?.("[data-sector-chart]")) hideSectorRotationChartPoint(event.target);
 });
 document.addEventListener("keydown", (event) => {
   const chart = event.target.matches?.("[data-market-timing-chart]") ? event.target : null;
@@ -834,6 +972,16 @@ document.addEventListener("keydown", (event) => {
   const current = Number(chart.dataset.activeIndex || points.length - 1);
   const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
   showMacroChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
+});
+document.addEventListener("keydown", (event) => {
+  const chart = event.target.matches?.("[data-sector-chart]") ? event.target : null;
+  if (!chart || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const points = marketTimingChartPoints(chart);
+  if (!points.length) return;
+  const current = Number(chart.dataset.activeIndex || points.length - 1);
+  const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
+  showSectorRotationChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
 });
 window.addEventListener("hashchange", renderWorkspaceRoute);
 
