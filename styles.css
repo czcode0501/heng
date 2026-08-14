@@ -326,6 +326,19 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 .timing-period-change > span { margin-bottom: 3px; }
 .timing-benchmark-block svg { display: block; width: 100%; height: 62px; margin-top: 8px; overflow: visible; }
 .timing-benchmark-block path { fill: none; stroke: var(--market-accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.timing-chart-shell { position: relative; }
+.timing-chart-shell svg { cursor: crosshair; }
+.timing-chart-shell svg:focus-visible { outline: 2px solid var(--market-accent); outline-offset: 2px; }
+.timing-chart-hit-zone { fill: transparent; pointer-events: all; }
+.timing-chart-cursor { opacity: 0; stroke: var(--border-strong); stroke-dasharray: 2 2; stroke-width: 1; pointer-events: none; }
+.timing-chart-dot { opacity: 0; fill: var(--surface); stroke: var(--market-accent); stroke-width: 2; pointer-events: none; }
+.timing-chart-shell.is-active .timing-chart-cursor, .timing-chart-shell.is-active .timing-chart-dot { opacity: 1; }
+.timing-chart-tooltip { position: absolute; top: 2px; left: var(--tooltip-x, 50%); z-index: 2; display: grid; min-width: 116px; padding: 7px 9px; color: var(--text); background: color-mix(in srgb, var(--surface) 96%, transparent); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow); transform: translateX(8px); pointer-events: none; }
+.timing-chart-tooltip.is-flipped { transform: translateX(calc(-100% - 8px)); }
+.timing-chart-tooltip strong, .timing-chart-tooltip span, .timing-chart-tooltip em { font-size: 8px; line-height: 1.45; }
+.timing-chart-tooltip strong { font-family: var(--font-mono); font-size: 9px; }
+.timing-chart-tooltip span { color: var(--muted); }
+.timing-chart-tooltip em { margin-top: 2px; color: var(--market-accent); font-style: normal; font-weight: 800; }
 .timing-period-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 7px 0 0; padding-top: 8px; border-top: 1px solid var(--border); }
 .timing-period-stats dt, .timing-period-stats dd { margin: 0; font-size: 8px; }
 .timing-period-stats dt { color: var(--muted); }

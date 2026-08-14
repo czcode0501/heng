@@ -4,12 +4,28 @@ import assert from "node:assert/strict";
 import { marketTimingMarkets } from "../signals/market-timing/catalog.js";
 import {
   compareMarketTimingHistory,
+  getMarketTimingChartPoint,
   getMarketTimingRefreshDelay,
   renderMarketTimingWorkspace,
   renderMarketTimingWorkspaceError,
   renderMarketTimingWorkspaceLoading,
   shouldRefreshMarketTimingNavigation,
 } from "../signals/market-timing/view.js";
+
+test("chart hover resolves the nearest date, value, and change from the selected start", () => {
+  const points = [
+    { date: "2026-08-12", value: 100 },
+    { date: "2026-08-13", value: 96 },
+    { date: "2026-08-14", value: 102 },
+  ];
+
+  assert.deepEqual(getMarketTimingChartPoint(points, 0.55), {
+    index: 1,
+    date: "2026-08-13",
+    value: 96,
+    changePercent: -4,
+  });
+});
 
 test("market timing compares the selected start observation with the latest close", () => {
   const history = [
@@ -99,6 +115,9 @@ test("market timing workspace renders source-backed scores and automatic update 
   assert.match(html, /data-market-timing-range="1y"/);
   assert.match(html, /data-market-timing-custom-start/);
   assert.match(html, /区间变化/);
+  assert.match(html, /data-market-timing-chart/);
+  assert.match(html, /timing-chart-tooltip/);
+  assert.match(html, /五维证据随所选区间重新计算/);
   assert.doesNotMatch(html, /data-refresh-market-timing/);
   assert.doesNotMatch(html, /等待定义|演示数据|实时数据已连接/);
 });

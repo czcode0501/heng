@@ -79,7 +79,23 @@ export function compareMarketTimingHistory(history, options = {}) {
     high: Math.max(...selected.map(({ value }) => value)),
     low: Math.min(...selected.map(({ value }) => value)),
     observations: selected.length,
+    points: selected,
     history: selected.map(({ date, value }) => ({ date, value: Number((value / base * 100).toFixed(4)) })),
+  };
+}
+
+export function getMarketTimingChartPoint(points, ratio) {
+  if (!Array.isArray(points) || !points.length) return null;
+  const safeRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const index = Math.round(safeRatio * (points.length - 1));
+  const point = points[index];
+  const base = Number(points[0].value);
+  const value = Number(point.value);
+  return {
+    index,
+    date: point.date,
+    value,
+    changePercent: Number((base ? (value / base - 1) * 100 : 0).toFixed(2)),
   };
 }
 
@@ -152,6 +168,7 @@ function renderMarket(market, options) {
   const change = comparison?.changePercent || 0;
   const sourceSuffix = market.source?.isFallback ? " · 已启用备用源" : "";
   const historyPath = sparklinePath(comparison?.history);
+  const chartPoints = escapeHtml(JSON.stringify(comparison?.points || []));
   return `<article class="timing-live-market ${escapeHtml(market.id)} ${market.status === "stale" ? "is-stale" : ""}" aria-labelledby="timing-${escapeHtml(market.id)}-title">
     <header class="timing-live-market-header">
       <span class="market-code" aria-hidden="true">${definition.code}</span>
@@ -163,7 +180,15 @@ function renderMarket(market, options) {
         <div class="timing-regime-score ${escapeHtml(market.regime.tone)}"><span>综合得分</span><strong>${Number(market.regime.score).toFixed(1)}</strong><em>${escapeHtml(market.regime.label)}</em></div>
         <div class="timing-benchmark-block">
           <header><div><span>${escapeHtml(market.benchmark.name)} · ${escapeHtml(rangeLabel(options))}</span><strong>${formatIndex(comparison?.endValue ?? market.benchmark.close)}</strong></div><div class="timing-period-change"><span>区间变化</span><em class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</em></div></header>
-          <svg viewBox="0 0 300 78" role="img" aria-label="${escapeHtml(market.benchmark.name)}从${escapeHtml(comparison?.startDate || "--")}到${escapeHtml(comparison?.endDate || "--")}的标准化走势"><path d="${historyPath}" vector-effect="non-scaling-stroke"></path></svg>
+          <div class="timing-chart-shell">
+            <svg viewBox="0 0 300 78" role="application" tabindex="0" data-market-timing-chart data-chart-points="${chartPoints}" aria-label="${escapeHtml(market.benchmark.name)}交互式走势图。移动鼠标或使用左右方向键查看具体日期和点位。">
+              <path d="${historyPath}" vector-effect="non-scaling-stroke"></path>
+              <line class="timing-chart-cursor" x1="0" x2="0" y1="0" y2="78"></line>
+              <circle class="timing-chart-dot" cx="0" cy="0" r="3.5"></circle>
+              <rect class="timing-chart-hit-zone" width="300" height="78"></rect>
+            </svg>
+            <div class="timing-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div>
+          </div>
           <dl class="timing-period-stats">
             <div><dt>起点</dt><dd>${escapeHtml(comparison?.startDate || "--")} · ${formatIndex(comparison?.startValue || 0)}</dd></div>
             <div><dt>最新</dt><dd>${escapeHtml(comparison?.endDate || "--")} · ${formatIndex(comparison?.endValue || 0)}</dd></div>
@@ -178,7 +203,7 @@ function renderMarket(market, options) {
       </section>
       <p class="timing-regime-explanation">${escapeHtml(market.regime.summary)}</p>
       <section aria-labelledby="timing-${escapeHtml(market.id)}-dimensions">
-        <header class="timing-dimensions-heading"><div><span>SIGNAL STACK</span><h4 id="timing-${escapeHtml(market.id)}-dimensions">五维择时证据</h4></div><strong>总权重 100%</strong></header>
+        <header class="timing-dimensions-heading"><div><span>SIGNAL STACK</span><h4 id="timing-${escapeHtml(market.id)}-dimensions">五维择时证据</h4></div><strong>五维证据随所选区间重新计算 · 总权重 100%</strong></header>
         <div class="timing-dimension-grid">${market.dimensions.map(renderDimension).join("")}</div>
       </section>
       <footer class="timing-market-source"><span>数据源：${escapeHtml(market.source?.name || "--")}${escapeHtml(sourceSuffix)}</span><span>${escapeHtml(market.source?.access || "无需 API Key")} · 自动更新</span></footer>

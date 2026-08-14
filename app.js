@@ -4,6 +4,7 @@ import { macroMarkets } from "./signals/macro/catalog.js";
 import { renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
 import { marketTimingMarkets } from "./signals/market-timing/catalog.js";
 import {
+  getMarketTimingChartPoint,
   getMarketTimingRefreshDelay,
   renderMarketTimingWorkspace,
   renderMarketTimingWorkspaceError,
@@ -74,6 +75,13 @@ let marketTimingRange = "1m";
 let marketTimingCustomStart = "";
 let marketTimingForceOnNextRender = false;
 let activeAnalysisResult = null;
+
+function marketTimingRequestPath(force = false) {
+  const params = new URLSearchParams({ range: marketTimingRange });
+  if (marketTimingRange === "custom" && marketTimingCustomStart) params.set("start", marketTimingCustomStart);
+  if (force) params.set("refresh", "1");
+  return `/api/market-timing?${params.toString()}`;
+}
 
 const elements = {
   portfolioList: document.querySelector("#portfolio-list"),
@@ -323,7 +331,7 @@ async function loadMarketTimingWorkspaceData(force = false) {
   const status = elements.signalDetail.querySelector(".timing-header-actions .quality-status");
   if (status) status.textContent = force ? "正在刷新数据…" : "正在检查数据…";
   try {
-    const response = await fetch(`/api/market-timing${force ? "?refresh=1" : ""}`);
+    const response = await fetch(marketTimingRequestPath(force));
     const payload = await response.json();
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== marketTimingRequestId || route.directory !== "market-timing") return;
@@ -644,6 +652,53 @@ document.addEventListener("keydown", (event) => {
     elements.search.focus();
   }
 });
+
+function marketTimingChartPoints(chart) {
+  try {
+    const points = JSON.parse(chart.dataset.chartPoints || "[]");
+    return Array.isArray(points) ? points : [];
+  } catch {
+    return [];
+  }
+}
+
+function showMarketTimingChartPoint(chart, ratio) {
+  const points = marketTimingChartPoints(chart);
+  const point = getMarketTimingChartPoint(points, ratio);
+  if (!point) return;
+  const shell = chart.closest(".timing-chart-shell");
+  const tooltip = shell?.querySelector(".timing-chart-tooltip");
+  const cursor = chart.querySelector(".timing-chart-cursor");
+  const dot = chart.querySelector(".timing-chart-dot");
+  if (!shell || !tooltip || !cursor || !dot) return;
+  const values = points.map(({ value }) => Number(value)).filter(Number.isFinite);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || 1;
+  const x = points.length > 1 ? point.index / (points.length - 1) * 300 : 150;
+  const y = 78 - (point.value - minimum) / span * 78;
+  const percent = points.length > 1 ? point.index / (points.length - 1) * 100 : 50;
+  cursor.setAttribute("x1", x.toFixed(2));
+  cursor.setAttribute("x2", x.toFixed(2));
+  dot.setAttribute("cx", x.toFixed(2));
+  dot.setAttribute("cy", y.toFixed(2));
+  tooltip.querySelector("strong").textContent = point.date;
+  tooltip.querySelector("span").textContent = `点位 ${point.value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}`;
+  tooltip.querySelector("em").textContent = `较起点 ${point.changePercent >= 0 ? "+" : ""}${point.changePercent.toFixed(2)}%`;
+  tooltip.hidden = false;
+  tooltip.classList.toggle("is-flipped", percent > 64);
+  shell.style.setProperty("--tooltip-x", `${percent}%`);
+  shell.classList.add("is-active");
+  chart.dataset.activeIndex = String(point.index);
+}
+
+function hideMarketTimingChartPoint(chart) {
+  const shell = chart.closest(".timing-chart-shell");
+  shell?.classList.remove("is-active");
+  const tooltip = shell?.querySelector(".timing-chart-tooltip");
+  if (tooltip) tooltip.hidden = true;
+}
+
 document.addEventListener("click", (event) => {
   const marketTimingNavigation = event.target.closest('a[href="#signals/market-timing"]');
   if (marketTimingNavigation) {
@@ -660,6 +715,7 @@ document.addEventListener("click", (event) => {
     marketTimingRange = timingRangeButton.dataset.marketTimingRange || "1m";
     elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
     elements.signalDetail.querySelector(`[data-market-timing-range="${marketTimingRange}"]`)?.focus();
+    loadMarketTimingWorkspaceData();
     return;
   }
   const rangeButton = event.target.closest("[data-macro-range]");
@@ -682,6 +738,34 @@ document.addEventListener("change", (event) => {
   marketTimingRange = "custom";
   elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
   elements.signalDetail.querySelector("[data-market-timing-custom-start]")?.focus();
+  loadMarketTimingWorkspaceData();
+});
+document.addEventListener("pointermove", (event) => {
+  const chart = event.target.closest?.("[data-market-timing-chart]");
+  if (!chart) return;
+  const bounds = chart.getBoundingClientRect();
+  showMarketTimingChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
+});
+document.addEventListener("pointerout", (event) => {
+  const chart = event.target.closest?.("[data-market-timing-chart]");
+  if (!chart || chart.contains(event.relatedTarget)) return;
+  hideMarketTimingChartPoint(chart);
+});
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches?.("[data-market-timing-chart]")) showMarketTimingChartPoint(event.target, 1);
+});
+document.addEventListener("focusout", (event) => {
+  if (event.target.matches?.("[data-market-timing-chart]")) hideMarketTimingChartPoint(event.target);
+});
+document.addEventListener("keydown", (event) => {
+  const chart = event.target.matches?.("[data-market-timing-chart]") ? event.target : null;
+  if (!chart || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const points = marketTimingChartPoints(chart);
+  if (!points.length) return;
+  const current = Number(chart.dataset.activeIndex || points.length - 1);
+  const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
+  showMarketTimingChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
 });
 window.addEventListener("hashchange", renderWorkspaceRoute);
 
