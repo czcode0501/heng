@@ -65,6 +65,7 @@ html[data-theme="dark"] {
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; }
 body { margin: 0; min-width: 320px; overflow-x: hidden; background: var(--bg); color: var(--text); }
 body:has(dialog[open]) { overflow: hidden; }
@@ -89,6 +90,11 @@ a { color: inherit; text-decoration: none; }
 .nav-link:hover { color: var(--text); background: var(--surface-hover); }
 .nav-link.active { color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 var(--accent); }
 .nav-link span { width: 18px; color: var(--subtle); text-align: center; }
+.signal-subnav { display: grid; gap: 2px; margin: -2px 0 8px 30px; padding-left: 12px; border-left: 1px solid var(--border); }
+.signal-subnav-link { min-height: 30px; display: flex; align-items: center; gap: 8px; padding: 0 8px; border-radius: 4px; color: var(--muted); font-size: 11px; font-weight: 600; }
+.signal-subnav-link span { width: 18px; color: var(--subtle); font-size: 9px; font-variant-numeric: tabular-nums; }
+.signal-subnav-link:hover { color: var(--text); background: var(--surface-hover); }
+.signal-subnav-link.active { color: var(--accent); background: var(--accent-soft); }
 
 .portfolio-nav { min-height: 0; display: flex; flex: 1; flex-direction: column; padding-top: 4px; }
 .section-heading-row, .panel-header, .topbar, .metric-foot, .dialog-header, .dialog-actions { display: flex; align-items: center; justify-content: space-between; }
@@ -214,6 +220,47 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 .signal-up { color: var(--accent); background: var(--accent-soft); }
 .signal-watch { color: var(--warning); background: var(--warning-soft); }
 .signal-flat { color: var(--muted); background: var(--surface-raised); }
+.text-link { color: var(--accent); font-size: 11px; font-weight: 700; }
+.text-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.overview-signal-links { display: grid; grid-template-columns: repeat(5, 1fr); }
+.overview-signal-link { min-width: 0; min-height: 104px; display: grid; align-content: center; gap: 8px; padding: 16px 20px; border-right: 1px solid var(--border); }
+.overview-signal-link:last-child { border-right: 0; }
+.overview-signal-link:hover { background: var(--surface-hover); }
+.overview-signal-link > span { color: var(--signal-number); font-size: 20px; font-weight: 800; }
+.overview-signal-link strong { font-size: 13px; }
+.overview-signal-link small { width: fit-content; padding: 3px 6px; color: var(--muted); background: var(--surface-raised); border-radius: 4px; font-size: 9px; }
+
+.signals-workspace { display: grid; gap: 16px; }
+.workspace-intro { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.workspace-intro h2 { font-size: 20px; }
+.workspace-intro p:last-child { max-width: 720px; margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.structure-status { display: inline-flex; flex-shrink: 0; padding: 6px 9px; color: var(--warning); background: var(--warning-soft); border-radius: 4px; font-size: 10px; font-weight: 800; white-space: nowrap; }
+.signal-directory-grid { overflow: hidden; margin-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.signal-directory-card { min-height: 112px; display: grid; grid-template-columns: 48px 180px minmax(240px, 1fr) 84px 88px; align-items: center; gap: 20px; padding: 20px 24px; border-bottom: 1px solid var(--border); }
+.signal-directory-card:last-child { border-bottom: 0; }
+.signal-directory-card:hover { background: var(--surface-hover); }
+.directory-index { color: var(--signal-number); font-size: 25px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.directory-name small { color: var(--subtle); font-size: 9px; font-weight: 700; letter-spacing: .12em; }
+.directory-name h3 { margin: 5px 0 0; font-size: 15px; }
+.signal-directory-card > p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.directory-status { width: fit-content; padding: 4px 7px; color: var(--muted); background: var(--surface-raised); border-radius: 4px; font-size: 9px; font-style: normal; font-weight: 700; white-space: nowrap; }
+.signal-directory-card > strong { color: var(--accent); font-size: 11px; white-space: nowrap; }
+
+.signal-detail { padding: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-card); }
+.back-link { display: inline-flex; margin-bottom: 24px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.back-link:hover { color: var(--accent); }
+.signal-detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 32px; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
+.signal-detail-header h2 { font-size: 22px; }
+.signal-detail-header p:last-child { max-width: 680px; margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.definition-placeholder { min-height: 320px; display: grid; grid-template-columns: 84px minmax(0, 1fr) 260px; align-items: center; gap: 32px; padding: 40px 24px; }
+.placeholder-index { color: var(--signal-number); font-size: 56px; font-weight: 800; }
+.definition-placeholder h3 { margin: 0; font-size: 18px; }
+.definition-placeholder > div > p:last-child { max-width: 520px; margin: 12px 0 0; color: var(--muted); font-size: 13px; line-height: 1.65; }
+.definition-list { display: grid; gap: 1px; margin: 0; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.definition-list div { display: flex; justify-content: space-between; gap: 16px; padding: 12px; background: var(--surface-raised); }
+.definition-list dt, .definition-list dd { margin: 0; font-size: 11px; }
+.definition-list dt { color: var(--muted); }
+.definition-list dd { font-weight: 700; }
 
 dialog { width: min(460px, calc(100vw - 32px)); padding: 0; background: var(--surface-raised); border: 1px solid var(--border-strong); border-radius: var(--radius-lg); color: var(--text); box-shadow: var(--shadow); }
 dialog::backdrop { background: rgb(2 6 10 / 72%); backdrop-filter: blur(4px); }
@@ -286,6 +333,11 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .allocation-panel { display: grid; grid-template-columns: 1fr 1fr; align-items: center; }
   .allocation-panel .panel-header { grid-column: 1 / -1; }
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+  .signal-subnav { display: none; }
+  .signal-directory-card { grid-template-columns: 40px 150px minmax(220px, 1fr) 80px; }
+  .signal-directory-card > strong { display: none; }
+  .definition-placeholder { grid-template-columns: 64px minmax(0, 1fr); }
+  .definition-list { grid-column: 1 / -1; }
 }
 
 @media (max-width: 760px) {
@@ -305,6 +357,16 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .signal-grid { grid-template-columns: 1fr; }
   .signal-grid article { min-height: 112px; border-right: 0; border-bottom: 1px solid var(--border); }
   .allocation-panel { display: block; }
+  .overview-signal-links { grid-template-columns: 1fr; }
+  .overview-signal-link { min-height: 68px; grid-template-columns: 36px 1fr auto; align-items: center; padding: 12px 16px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .overview-signal-link:last-child { border-bottom: 0; }
+  .workspace-intro, .signal-detail-header { flex-direction: column; gap: 16px; }
+  .signal-directory-card { grid-template-columns: 36px minmax(0, 1fr) auto; gap: 12px; padding: 16px; }
+  .signal-directory-card > p { grid-column: 2 / -1; }
+  .directory-status { grid-column: 3; grid-row: 1; }
+  .definition-placeholder { grid-template-columns: 1fr; gap: 20px; padding: 32px 0 8px; }
+  .placeholder-index { font-size: 40px; }
+  .definition-list { grid-column: auto; }
   .analysis-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
   .analysis-header { align-items: flex-start; padding: 16px; }
   .analysis-content { min-height: 0; padding: 16px; }

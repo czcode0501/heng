@@ -1,4 +1,5 @@
 import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
+import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -80,6 +81,16 @@ const elements = {
   analysisMeta: document.querySelector("#analysis-stock-meta"),
   analysisSource: document.querySelector("#analysis-source"),
   analysisAddButton: document.querySelector("#analysis-add-button"),
+  overviewWorkspace: document.querySelector("#overview-workspace"),
+  signalsWorkspace: document.querySelector("#signals-workspace"),
+  signalsHub: document.querySelector("#signals-hub"),
+  signalDetail: document.querySelector("#signal-detail"),
+  signalSubnav: document.querySelector("#signal-subnav"),
+  signalDirectoryGrid: document.querySelector("#signal-directory-grid"),
+  overviewSignalLinks: document.querySelector("#overview-signal-links"),
+  navOverview: document.querySelector("#nav-overview"),
+  navSignals: document.querySelector("#nav-signals"),
+  pageContextCurrent: document.querySelector("#page-context-current"),
 };
 
 function stockBySymbol(symbol) {
@@ -197,9 +208,88 @@ function renderActivePortfolio() {
   renderAllocation(portfolio, investedValue, totalValue);
 }
 
+function renderSignalDirectoryStructure(activeDirectory = null) {
+  elements.signalSubnav.innerHTML = signalDirectories
+    .map((directory) => `<a class="signal-subnav-link${directory.id === activeDirectory ? " active" : ""}" href="#signals/${directory.id}" ${directory.id === activeDirectory ? 'aria-current="page"' : ""}>
+      <span>${directory.index}</span>${escapeHtml(directory.title)}
+    </a>`)
+    .join("");
+
+  elements.overviewSignalLinks.innerHTML = signalDirectories
+    .map((directory) => `<a class="overview-signal-link" href="#signals/${directory.id}">
+      <span>${directory.index}</span><strong>${escapeHtml(directory.title)}</strong><small>待定义</small>
+    </a>`)
+    .join("");
+
+  elements.signalDirectoryGrid.innerHTML = signalDirectories
+    .map((directory) => `<a class="signal-directory-card" href="#signals/${directory.id}" aria-label="进入${escapeHtml(directory.title)}目录">
+      <span class="directory-index">${directory.index}</span>
+      <div class="directory-name"><small>${directory.english}</small><h3>${escapeHtml(directory.title)}</h3></div>
+      <p>${escapeHtml(directory.description)}</p>
+      <em class="directory-status">等待定义</em>
+      <strong>打开目录 <span aria-hidden="true">→</span></strong>
+    </a>`)
+    .join("");
+}
+
+function renderSignalDetail(directory) {
+  elements.signalDetail.innerHTML = `<a class="back-link" href="#signals">← 返回模型信号目录</a>
+    <header class="signal-detail-header">
+      <div><p class="eyebrow">${directory.english}</p><h2>${escapeHtml(directory.title)}</h2><p>${escapeHtml(directory.description)}</p></div>
+      <span class="structure-status">目录已创建</span>
+    </header>
+    <section class="definition-placeholder" aria-labelledby="definition-title">
+      <span class="placeholder-index">${directory.index}</span>
+      <div>
+        <p class="eyebrow">MODULE DEFINITION</p>
+        <h3 id="definition-title">等待你的模块定义</h3>
+        <p>这里暂不预设分析逻辑。你讲解这个板块后，我们再补充数据源、指标、计算规则和最终输出。</p>
+      </div>
+      <dl class="definition-list">
+        <div><dt>数据源</dt><dd>待确定</dd></div>
+        <div><dt>指标体系</dt><dd>待确定</dd></div>
+        <div><dt>信号规则</dt><dd>待确定</dd></div>
+        <div><dt>输出格式</dt><dd>待确定</dd></div>
+      </dl>
+    </section>`;
+}
+
+function setPrimaryNavigation(workspace) {
+  const isOverview = workspace === "overview";
+  elements.navOverview.classList.toggle("active", isOverview);
+  elements.navSignals.classList.toggle("active", !isOverview);
+  elements.navOverview.toggleAttribute("aria-current", isOverview);
+  elements.navSignals.toggleAttribute("aria-current", !isOverview);
+}
+
+function renderWorkspaceRoute() {
+  const route = resolveWorkspaceRoute(window.location.hash);
+  const directory = signalDirectories.find((item) => item.id === route.directory) || null;
+  const isOverview = route.workspace === "overview";
+
+  elements.overviewWorkspace.hidden = !isOverview;
+  elements.signalsWorkspace.hidden = isOverview;
+  elements.signalsHub.hidden = Boolean(directory);
+  elements.signalDetail.hidden = !directory;
+  setPrimaryNavigation(route.workspace);
+  renderSignalDirectoryStructure(directory?.id || null);
+
+  if (isOverview) {
+    const portfolio = portfolios.find((item) => item.id === activePortfolioId);
+    elements.portfolioTitle.textContent = portfolio.name;
+    elements.pageContextCurrent.textContent = "组合总览";
+    return;
+  }
+
+  elements.portfolioTitle.textContent = directory?.title || "模型信号";
+  elements.pageContextCurrent.textContent = directory ? `模型信号 / ${directory.title}` : "模型信号";
+  if (directory) renderSignalDetail(directory);
+}
+
 function render() {
   renderPortfolioNav();
   renderActivePortfolio();
+  renderWorkspaceRoute();
 }
 
 function showToast(message) {
@@ -362,6 +452,7 @@ elements.portfolioList.addEventListener("click", (event) => {
   const button = event.target.closest("[data-portfolio-id]");
   if (!button) return;
   activePortfolioId = button.dataset.portfolioId;
+  if (resolveWorkspaceRoute(window.location.hash).workspace !== "overview") window.location.hash = "overview";
   render();
   updateAnalysisAddButton();
 });
@@ -467,6 +558,7 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
 });
+window.addEventListener("hashchange", renderWorkspaceRoute);
 
 document.querySelector("#close-analysis").addEventListener("click", () => elements.analysisDialog.close());
 elements.analysisAddButton.addEventListener("click", () => {
