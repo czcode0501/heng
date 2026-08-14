@@ -67,6 +67,7 @@ const elements = {
   dialog: document.querySelector("#create-portfolio-dialog"),
   createForm: document.querySelector("#create-portfolio-form"),
   toast: document.querySelector("#toast"),
+  themeToggle: document.querySelector("#theme-toggle"),
 };
 
 function stockBySymbol(symbol) {
@@ -86,6 +87,14 @@ function costInCny(position) {
 }
 
 function formatMoney(value, currency = "CNY") {
+  return new Intl.NumberFormat("zh-CN", {
+    style: "currency",
+    currency,
+    maximumFractionDigits: currency === "CNY" ? 0 : 2,
+  }).format(value);
+}
+
+function formatPrice(value, currency = "CNY") {
   return new Intl.NumberFormat("zh-CN", {
     style: "currency",
     currency,
@@ -121,12 +130,12 @@ function renderAllocation(portfolio, investedValue, totalValue) {
   const usShare = totalValue ? (marketValues.美股 / totalValue) * 100 : 0;
   const cash = Math.max(0, 100 - aShare - usShare);
   elements.investedPercent.textContent = `${invested.toFixed(0)}%`;
-  elements.allocationRing.style.background = `conic-gradient(var(--accent) 0 ${aShare}%, var(--cyan) ${aShare}% ${aShare + usShare}%, #2b3540 ${aShare + usShare}% 100%)`;
+  elements.allocationRing.style.background = `conic-gradient(var(--accent) 0 ${aShare}%, var(--cyan) ${aShare}% ${aShare + usShare}%, var(--cash) ${aShare + usShare}% 100%)`;
   elements.allocationRing.setAttribute("aria-label", `A股 ${aShare.toFixed(1)}%，美股 ${usShare.toFixed(1)}%，现金 ${cash.toFixed(1)}%`);
   const items = [
-    ["A股", aShare, "#39d98a"],
-    ["美股", usShare, "#57b8ff"],
-    ["现金", cash, "#465360"],
+    ["A股", aShare, "var(--accent)"],
+    ["美股", usShare, "var(--cyan)"],
+    ["现金", cash, "var(--cash)"],
   ];
   elements.allocationLegend.innerHTML = items
     .map(([label, value, color]) => `<div><span class="legend-dot" style="--legend-color:${color}" aria-hidden="true"></span><dt>${label}</dt><dd>${value.toFixed(1)}%</dd></div>`)
@@ -163,7 +172,7 @@ function renderActivePortfolio() {
       return `<tr>
         <td><div class="stock-cell"><span class="stock-avatar">${stock.symbol.slice(0, 2)}</span><span><strong>${stock.name}</strong><small>${stock.symbol}</small></span></div></td>
         <td><span class="market-badge">${marketName}</span></td>
-        <td>${formatMoney(stock.price, stock.currency)}</td>
+        <td>${formatPrice(stock.price, stock.currency)}</td>
         <td class="${changeClass}">${stock.change >= 0 ? "+" : ""}${stock.change.toFixed(2)}%</td>
         <td>${formatMoney(value)}</td>
         <td><span class="weight-bar"><i style="--weight:${Math.min(weight, 100)}%"></i>${weight.toFixed(1)}%</span></td>
@@ -340,6 +349,14 @@ document.addEventListener("keydown", (event) => {
 });
 document.addEventListener("click", (event) => {
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
+});
+
+elements.themeToggle.addEventListener("click", () => {
+  const isDark = document.documentElement.dataset.theme === "dark";
+  document.documentElement.dataset.theme = isDark ? "light" : "dark";
+  elements.themeToggle.setAttribute("aria-pressed", String(!isDark));
+  elements.themeToggle.setAttribute("aria-label", isDark ? "切换到深色模式" : "切换到浅色模式");
+  elements.themeToggle.querySelector("span").textContent = isDark ? "☾" : "☀";
 });
 
 render();
