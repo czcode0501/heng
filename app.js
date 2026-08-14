@@ -1,5 +1,7 @@
 import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
 import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
+import { macroMarkets } from "./signals/macro/catalog.js";
+import { renderMacroWorkspace } from "./signals/macro/view.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -233,6 +235,11 @@ function renderSignalDirectoryStructure(activeDirectory = null) {
 }
 
 function renderSignalDetail(directory) {
+  if (directory.id === "macro") {
+    elements.signalDetail.innerHTML = renderMacroWorkspace(macroMarkets);
+    return;
+  }
+
   elements.signalDetail.innerHTML = `<a class="back-link" href="#signals">← 返回模型信号目录</a>
     <header class="signal-detail-header">
       <div><p class="eyebrow">${directory.english}</p><h2>${escapeHtml(directory.title)}</h2><p>${escapeHtml(directory.description)}</p></div>
