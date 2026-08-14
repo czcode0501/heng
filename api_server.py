@@ -16,6 +16,7 @@ from macro_data import get_macro_dashboard
 from market_timing import apply_market_timing_range
 from market_timing_sources import get_market_timing_dashboard
 from sector_rotation_sources import get_sector_rotation_dashboard
+from signal_bootstrap import get_signal_bootstrap
 
 
 SEARCH_LIMIT = 10
@@ -307,6 +308,9 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 force = params.get("refresh", ["0"])[0] == "1"
                 data = get_macro_dashboard(force=force)
                 self.send_json(200, {"data": data})
+                return
+            if parsed.path == "/api/signals":
+                self.send_json(200, {"data": get_signal_bootstrap()})
                 return
             if parsed.path == "/api/market-timing":
                 force = params.get("refresh", ["0"])[0] == "1"

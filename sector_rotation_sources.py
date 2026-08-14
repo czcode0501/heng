@@ -3,23 +3,21 @@
 from __future__ import annotations
 
 import json
-import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from copy import deepcopy
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
+from market_data_hub import get_baostock_series, get_yfinance_series
 from market_timing_sources import get_market_timing_dashboard
 from sector_rotation import build_sector_market
 
 
-REQUEST_TIMEOUT_SECONDS = 20
 CACHE_TTL_SECONDS = 30 * 60
 ERROR_CACHE_TTL_SECONDS = 5 * 60
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "sector-rotation.json"
-BAOSTOCK_LOCK = threading.Lock()
 CACHE_LOCK = threading.Lock()
 MEMORY_CACHE: dict[str, object] = {"expires": 0.0, "data": None}
 
@@ -52,112 +50,12 @@ US_SECTORS = [
 ]
 
 
-def _finite(value: object) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
+def _fetch_yfinance_series(symbols: list[str], force: bool = False) -> dict[str, list[dict]]:
+    return get_yfinance_series(symbols, force=force, minimum=121)
 
 
-def _yahoo_rows(frame, symbol: str, *, batch: bool) -> list[dict]:
-    rows = []
-    for index, row in frame.iterrows():
-        def field(name: str) -> float | None:
-            try:
-                value = row[(name, symbol)] if batch else row[name]
-            except (KeyError, TypeError):
-                return None
-            return _finite(value)
-
-        close = field("Close")
-        if close is None:
-            continue
-        rows.append(
-            {
-                "date": str(index)[:10],
-                "open": field("Open") or close,
-                "high": field("High") or close,
-                "low": field("Low") or close,
-                "close": close,
-                "volume": field("Volume") or 0.0,
-                "amount": 0.0,
-            }
-        )
-    return rows
-
-
-def _fetch_yfinance_series(symbols: list[str]) -> dict[str, list[dict]]:
-    import yfinance as yf
-
-    frame = yf.download(
-        symbols,
-        period="2y",
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        threads=True,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-    bundle = {}
-    for symbol in symbols:
-        rows = _yahoo_rows(frame, symbol, batch=len(symbols) > 1) if not frame.empty else []
-        if len(rows) < 60:
-            history = yf.Ticker(symbol).history(
-                period="2y", interval="1d", auto_adjust=True, timeout=REQUEST_TIMEOUT_SECONDS
-            )
-            rows = _yahoo_rows(history, symbol, batch=False)
-        if len(rows) < 60:
-            raise RuntimeError(f"yfinance {symbol} 有效日线不足")
-        bundle[symbol] = rows
-    return bundle
-
-
-def _fetch_baostock_series(symbols: list[str]) -> dict[str, list[dict]]:
-    import baostock as bs
-
-    start_date = (date.today() - timedelta(days=800)).isoformat()
-    fields = "date,code,open,high,low,close,volume,amount"
-    with BAOSTOCK_LOCK:
-        login = bs.login()
-        if login.error_code != "0":
-            raise RuntimeError(f"BaoStock 登录失败: {login.error_msg}")
-        try:
-            bundle = {}
-            for symbol in symbols:
-                rows = []
-                result = None
-                for attempt in range(3):
-                    result = bs.query_history_k_data_plus(
-                        symbol, fields, start_date=start_date, frequency="d", adjustflag="3"
-                    )
-                    rows = []
-                    while result.error_code == "0" and result.next():
-                        values = result.get_row_data()
-                        try:
-                            rows.append(
-                                {
-                                    "date": values[0],
-                                    "open": float(values[2]),
-                                    "high": float(values[3]),
-                                    "low": float(values[4]),
-                                    "close": float(values[5]),
-                                    "volume": float(values[6] or 0),
-                                    "amount": float(values[7] or 0),
-                                }
-                            )
-                        except (IndexError, TypeError, ValueError):
-                            continue
-                    if result.error_code == "0" and len(rows) >= 121:
-                        break
-                    if attempt < 2:
-                        time.sleep(0.2 * (attempt + 1))
-                if result.error_code != "0" or len(rows) < 121:
-                    raise RuntimeError(f"BaoStock {symbol} 有效日线不足")
-                bundle[symbol] = rows
-            return bundle
-        finally:
-            bs.logout()
+def _fetch_baostock_series(symbols: list[str], force: bool = False) -> dict[str, list[dict]]:
+    return get_baostock_series(symbols, force=force, minimum=121)
 
 
 def _timing_scores(force: bool = False) -> dict[str, float]:
@@ -168,12 +66,12 @@ def _timing_scores(force: bool = False) -> dict[str, float]:
     }
 
 
-def fetch_china_sector_market(timing_score: float = 45) -> dict:
+def fetch_china_sector_market(timing_score: float = 45, force: bool = False) -> dict:
     baostock_symbols = ["sh.000300"] + [sector["symbol"] for sector in CHINA_SECTORS if sector["source"] == "baostock"]
     yahoo_symbols = [sector["symbol"] for sector in CHINA_SECTORS if sector["source"] == "yfinance"]
     with ThreadPoolExecutor(max_workers=2) as executor:
-        baostock_future = executor.submit(_fetch_baostock_series, baostock_symbols)
-        yahoo_future = executor.submit(_fetch_yfinance_series, yahoo_symbols)
+        baostock_future = executor.submit(_fetch_baostock_series, baostock_symbols, force)
+        yahoo_future = executor.submit(_fetch_yfinance_series, yahoo_symbols, force)
         bundle = {**baostock_future.result(), **yahoo_future.result()}
     sectors = [{**sector, "points": bundle[sector["symbol"]]} for sector in CHINA_SECTORS]
     return build_sector_market(
@@ -192,9 +90,9 @@ def fetch_china_sector_market(timing_score: float = 45) -> dict:
     )
 
 
-def fetch_us_sector_market(timing_score: float = 45) -> dict:
+def fetch_us_sector_market(timing_score: float = 45, force: bool = False) -> dict:
     symbols = ["SPY"] + [sector["symbol"] for sector in US_SECTORS]
-    bundle = _fetch_yfinance_series(symbols)
+    bundle = _fetch_yfinance_series(symbols, force=force)
     sectors = [{**sector, "points": bundle[sector["symbol"]]} for sector in US_SECTORS]
     return build_sector_market(
         "united-states",
@@ -232,6 +130,14 @@ def _fresh_cache(path: Path) -> dict | None:
         return None
     age = (datetime.now(timezone.utc) - generated_at).total_seconds()
     return payload if 0 <= age < CACHE_TTL_SECONDS else None
+
+
+def has_fresh_sector_rotation_dashboard(cache_path: Path | None = None) -> bool:
+    """Report cache readiness without triggering an external request."""
+    now = time.time()
+    if MEMORY_CACHE["data"] is not None and now < float(MEMORY_CACHE["expires"] or 0):
+        return True
+    return _fresh_cache(cache_path or DEFAULT_CACHE_PATH) is not None
 
 
 def _write_cache(path: Path, payload: dict) -> None:
@@ -289,8 +195,8 @@ def get_sector_rotation_dashboard(
         if default_fetchers:
             scores = _timing_scores(force=False)
             active_fetchers = {
-                "china": lambda: fetch_china_sector_market(scores.get("china", 45)),
-                "united-states": lambda: fetch_us_sector_market(scores.get("united-states", 45)),
+                "china": lambda: fetch_china_sector_market(scores.get("china", 45), force=force),
+                "united-states": lambda: fetch_us_sector_market(scores.get("united-states", 45), force=force),
             }
         else:
             active_fetchers = fetchers or {}

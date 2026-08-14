@@ -224,10 +224,6 @@ export function getMarketTimingRefreshDelay(payload) {
   return Math.max(60, Number.isFinite(seconds) && seconds > 0 ? seconds : 1800) * 1000;
 }
 
-export function shouldRefreshMarketTimingNavigation(href, currentDirectory) {
-  return href === "#signals/market-timing" && currentDirectory === "market-timing";
-}
-
 export function renderMarketTimingWorkspaceLoading(markets) {
   return `${workspaceHeader("正在连接免费数据源")}
     <section class="timing-auto-note" aria-label="自动更新说明"><strong>零配置数据模式</strong><p>BaoStock 与 yfinance 由服务端自动读取；无需填写 API Key，完成后将展示数据日期和质量状态。</p><span>正在检查 ${markets.length} 个市场…</span></section>

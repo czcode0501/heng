@@ -1,5 +1,6 @@
 import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
 import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
+import { createSignalPreloader } from "./signals/data-preload.js";
 import { macroMarkets } from "./signals/macro/catalog.js";
 import { getMacroChartPoint, renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
 import { marketTimingMarkets } from "./signals/market-timing/catalog.js";
@@ -9,7 +10,6 @@ import {
   renderMarketTimingWorkspace,
   renderMarketTimingWorkspaceError,
   renderMarketTimingWorkspaceLoading,
-  shouldRefreshMarketTimingNavigation,
 } from "./signals/market-timing/view.js";
 import {
   getSectorRotationChartPoint,
@@ -87,20 +87,37 @@ let marketTimingRefreshTimer;
 let latestMarketTimingPayload = null;
 let marketTimingRange = "1m";
 let marketTimingCustomStart = "";
-let marketTimingForceOnNextRender = false;
 let sectorRotationRequestId = 0;
 let sectorRotationRefreshTimer;
 let latestSectorRotationPayload = null;
 let sectorRotationRange = "3m";
-let sectorRotationForceOnNextRender = false;
 const activeSectorRotationSectors = { china: null, "united-states": null };
 let capitalFlowRequestId = 0;
 let capitalFlowRefreshTimer;
 let latestCapitalFlowPayload = null;
 let capitalFlowPeriod = "20d";
-let capitalFlowForceOnNextRender = false;
 const activeCapitalFlowSectors = { china: null, "united-states": null };
 let activeAnalysisResult = null;
+const signalPreloader = createSignalPreloader();
+
+function hydrateSignalWorkspaces(workspaces = {}) {
+  if (!latestMacroPayload && Array.isArray(workspaces.macro?.markets)) latestMacroPayload = workspaces.macro;
+  if (!latestMarketTimingPayload && Array.isArray(workspaces.marketTiming?.markets)) latestMarketTimingPayload = workspaces.marketTiming;
+  if (!latestSectorRotationPayload && Array.isArray(workspaces.sectorRotation?.markets)) latestSectorRotationPayload = workspaces.sectorRotation;
+  if (!latestCapitalFlowPayload && Array.isArray(workspaces.capitalFlow?.markets)) latestCapitalFlowPayload = workspaces.capitalFlow;
+  for (const market of latestSectorRotationPayload?.markets || []) {
+    if (!activeSectorRotationSectors[market.id] && market.sectors?.length) activeSectorRotationSectors[market.id] = market.sectors[0].id;
+  }
+  for (const market of latestCapitalFlowPayload?.markets || []) {
+    if (!activeCapitalFlowSectors[market.id] && market.sectors?.length) activeCapitalFlowSectors[market.id] = market.sectors[0].id;
+  }
+}
+
+async function getPreloadedSignalWorkspace(id) {
+  const bootstrap = await signalPreloader.load();
+  hydrateSignalWorkspaces(bootstrap.workspaces);
+  return bootstrap.workspaces[id];
+}
 
 function marketTimingRequestPath(force = false) {
   const params = new URLSearchParams({ range: marketTimingRange });
@@ -271,7 +288,7 @@ function renderSignalDirectoryStructure(activeDirectory = null) {
 
   elements.overviewSignalLinks.innerHTML = signalDirectories
     .map((directory) => `<a class="overview-signal-link" href="#signals/${directory.id}">
-      <span>${directory.index}</span><strong>${escapeHtml(directory.title)}</strong><small>待定义</small>
+      <span>${directory.index}</span><strong>${escapeHtml(directory.title)}</strong><small>${escapeHtml(directory.status)}</small>
     </a>`)
     .join("");
 
@@ -280,7 +297,7 @@ function renderSignalDirectoryStructure(activeDirectory = null) {
       <span class="directory-index">${directory.index}</span>
       <div class="directory-name"><small>${directory.english}</small><h3>${escapeHtml(directory.title)}</h3></div>
       <p>${escapeHtml(directory.description)}</p>
-      <em class="directory-status">等待定义</em>
+      <em class="directory-status">${escapeHtml(directory.status)}</em>
       <strong>打开目录 <span aria-hidden="true">→</span></strong>
     </a>`)
     .join("");
@@ -288,7 +305,9 @@ function renderSignalDirectoryStructure(activeDirectory = null) {
 
 function renderSignalDetail(directory) {
   if (directory.id === "macro") {
-    elements.signalDetail.innerHTML = renderMacroWorkspaceLoading(macroMarkets);
+    elements.signalDetail.innerHTML = latestMacroPayload
+      ? renderMacroWorkspace(latestMacroPayload, { range: macroTimeRange })
+      : renderMacroWorkspaceLoading(macroMarkets);
     loadMacroWorkspaceData();
     return;
   }
@@ -297,9 +316,7 @@ function renderSignalDetail(directory) {
     elements.signalDetail.innerHTML = latestMarketTimingPayload
       ? renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart })
       : renderMarketTimingWorkspaceLoading(marketTimingMarkets);
-    const force = marketTimingForceOnNextRender;
-    marketTimingForceOnNextRender = false;
-    loadMarketTimingWorkspaceData(force);
+    loadMarketTimingWorkspaceData();
     return;
   }
 
@@ -307,9 +324,7 @@ function renderSignalDetail(directory) {
     elements.signalDetail.innerHTML = latestSectorRotationPayload
       ? renderSectorRotationWorkspace(latestSectorRotationPayload, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors })
       : renderSectorRotationWorkspaceLoading();
-    const force = sectorRotationForceOnNextRender;
-    sectorRotationForceOnNextRender = false;
-    loadSectorRotationWorkspaceData(force);
+    loadSectorRotationWorkspaceData();
     return;
   }
 
@@ -317,9 +332,7 @@ function renderSignalDetail(directory) {
     elements.signalDetail.innerHTML = latestCapitalFlowPayload
       ? renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors })
       : renderCapitalFlowWorkspaceLoading();
-    const force = capitalFlowForceOnNextRender;
-    capitalFlowForceOnNextRender = false;
-    loadCapitalFlowWorkspaceData(force);
+    loadCapitalFlowWorkspaceData();
     return;
   }
 
@@ -344,7 +357,7 @@ function renderSignalDetail(directory) {
     </section>`;
 }
 
-async function loadMacroWorkspaceData(force = false) {
+async function loadMacroWorkspaceData(force = false, usePreload = true) {
   const requestId = ++macroRequestId;
   const refreshButton = elements.signalDetail.querySelector("[data-refresh-macro]");
   if (refreshButton) {
@@ -352,18 +365,25 @@ async function loadMacroWorkspaceData(force = false) {
     refreshButton.textContent = force ? "正在检查…" : "正在连接…";
   }
   try {
-    const response = await fetch(`/api/macro${force ? "?refresh=1" : ""}`);
-    const payload = await response.json();
+    let data = !force && usePreload ? latestMacroPayload : null;
+    if (!data && !force && usePreload) {
+      try { data = await getPreloadedSignalWorkspace("macro"); } catch { /* individual endpoint fallback */ }
+    }
+    if (!data) {
+      const response = await fetch(`/api/macro${force ? "?refresh=1" : ""}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || "宏观数据读取失败");
+      data = payload?.data;
+    }
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== macroRequestId || route.directory !== "macro") return;
-    if (!response.ok) throw new Error(payload?.error?.message || "宏观数据读取失败");
-    if (!Array.isArray(payload?.data?.markets)) throw new Error("宏观数据返回格式不正确");
-    latestMacroPayload = payload.data;
-    elements.signalDetail.innerHTML = renderMacroWorkspace(payload.data, { range: macroTimeRange });
+    if (!Array.isArray(data?.markets)) throw new Error("宏观数据返回格式不正确");
+    latestMacroPayload = data;
+    elements.signalDetail.innerHTML = renderMacroWorkspace(data, { range: macroTimeRange });
     window.clearTimeout(macroRefreshTimer);
-    const refreshDelay = Math.max(60, Number(payload.data.refreshAfterSeconds) || 21600) * 1000;
+    const refreshDelay = Math.max(60, Number(data.refreshAfterSeconds) || 21600) * 1000;
     macroRefreshTimer = window.setTimeout(() => {
-      if (resolveWorkspaceRoute(window.location.hash).directory === "macro") loadMacroWorkspaceData();
+      if (resolveWorkspaceRoute(window.location.hash).directory === "macro") loadMacroWorkspaceData(false, false);
     }, refreshDelay);
   } catch (error) {
     const route = resolveWorkspaceRoute(window.location.hash);
@@ -372,23 +392,30 @@ async function loadMacroWorkspaceData(force = false) {
   }
 }
 
-async function loadMarketTimingWorkspaceData(force = false) {
+async function loadMarketTimingWorkspaceData(force = false, usePreload = true) {
   const requestId = ++marketTimingRequestId;
   const status = elements.signalDetail.querySelector(".timing-header-actions .quality-status");
   if (status) status.textContent = force ? "正在刷新数据…" : "正在检查数据…";
   try {
-    const response = await fetch(marketTimingRequestPath(force));
-    const payload = await response.json();
+    let data = !force && usePreload ? latestMarketTimingPayload : null;
+    if (!data && !force && usePreload) {
+      try { data = await getPreloadedSignalWorkspace("marketTiming"); } catch { /* individual endpoint fallback */ }
+    }
+    if (!data) {
+      const response = await fetch(marketTimingRequestPath(force));
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || "市场择时数据读取失败");
+      data = payload?.data;
+    }
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== marketTimingRequestId || route.directory !== "market-timing") return;
-    if (!response.ok) throw new Error(payload?.error?.message || "市场择时数据读取失败");
-    if (!Array.isArray(payload?.data?.markets)) throw new Error("市场择时数据返回格式不正确");
-    latestMarketTimingPayload = payload.data;
-    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(payload.data, { range: marketTimingRange, customStart: marketTimingCustomStart });
+    if (!Array.isArray(data?.markets)) throw new Error("市场择时数据返回格式不正确");
+    latestMarketTimingPayload = data;
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(data, { range: marketTimingRange, customStart: marketTimingCustomStart });
     window.clearTimeout(marketTimingRefreshTimer);
     marketTimingRefreshTimer = window.setTimeout(() => {
-      if (resolveWorkspaceRoute(window.location.hash).directory === "market-timing") loadMarketTimingWorkspaceData();
-    }, getMarketTimingRefreshDelay(payload.data));
+      if (resolveWorkspaceRoute(window.location.hash).directory === "market-timing") loadMarketTimingWorkspaceData(false, false);
+    }, getMarketTimingRefreshDelay(data));
   } catch (error) {
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== marketTimingRequestId || route.directory !== "market-timing") return;
@@ -396,7 +423,7 @@ async function loadMarketTimingWorkspaceData(force = false) {
   }
 }
 
-async function loadSectorRotationWorkspaceData(force = false) {
+async function loadSectorRotationWorkspaceData(force = false, usePreload = true) {
   const requestId = ++sectorRotationRequestId;
   const refreshButton = elements.signalDetail.querySelector("[data-refresh-sector-rotation]");
   if (refreshButton) {
@@ -404,23 +431,30 @@ async function loadSectorRotationWorkspaceData(force = false) {
     refreshButton.textContent = force ? "正在刷新…" : "正在检查…";
   }
   try {
-    const response = await fetch(`/api/sector-rotation${force ? "?refresh=1" : ""}`);
-    const payload = await response.json();
+    let data = !force && usePreload ? latestSectorRotationPayload : null;
+    if (!data && !force && usePreload) {
+      try { data = await getPreloadedSignalWorkspace("sectorRotation"); } catch { /* individual endpoint fallback */ }
+    }
+    if (!data) {
+      const response = await fetch(`/api/sector-rotation${force ? "?refresh=1" : ""}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || "板块轮动数据读取失败");
+      data = payload?.data;
+    }
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== sectorRotationRequestId || route.directory !== "sector-rotation") return;
-    if (!response.ok) throw new Error(payload?.error?.message || "板块轮动数据读取失败");
-    if (!Array.isArray(payload?.data?.markets)) throw new Error("板块轮动数据返回格式不正确");
-    latestSectorRotationPayload = payload.data;
-    for (const market of payload.data.markets) {
+    if (!Array.isArray(data?.markets)) throw new Error("板块轮动数据返回格式不正确");
+    latestSectorRotationPayload = data;
+    for (const market of data.markets) {
       if (!activeSectorRotationSectors[market.id] && market.sectors?.length) {
         activeSectorRotationSectors[market.id] = market.sectors[0].id;
       }
     }
-    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(payload.data, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
+    elements.signalDetail.innerHTML = renderSectorRotationWorkspace(data, { range: sectorRotationRange, activeSectors: activeSectorRotationSectors });
     window.clearTimeout(sectorRotationRefreshTimer);
     sectorRotationRefreshTimer = window.setTimeout(() => {
-      if (resolveWorkspaceRoute(window.location.hash).directory === "sector-rotation") loadSectorRotationWorkspaceData();
-    }, getSectorRotationRefreshDelay(payload.data));
+      if (resolveWorkspaceRoute(window.location.hash).directory === "sector-rotation") loadSectorRotationWorkspaceData(false, false);
+    }, getSectorRotationRefreshDelay(data));
   } catch (error) {
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== sectorRotationRequestId || route.directory !== "sector-rotation") return;
@@ -428,7 +462,7 @@ async function loadSectorRotationWorkspaceData(force = false) {
   }
 }
 
-async function loadCapitalFlowWorkspaceData(force = false) {
+async function loadCapitalFlowWorkspaceData(force = false, usePreload = true) {
   const requestId = ++capitalFlowRequestId;
   const refreshButton = elements.signalDetail.querySelector("[data-refresh-capital-flow]");
   if (refreshButton) {
@@ -436,21 +470,28 @@ async function loadCapitalFlowWorkspaceData(force = false) {
     refreshButton.textContent = force ? "正在刷新…" : "正在检查…";
   }
   try {
-    const response = await fetch(`/api/capital-flow${force ? "?refresh=1" : ""}`);
-    const payload = await response.json();
+    let data = !force && usePreload ? latestCapitalFlowPayload : null;
+    if (!data && !force && usePreload) {
+      try { data = await getPreloadedSignalWorkspace("capitalFlow"); } catch { /* individual endpoint fallback */ }
+    }
+    if (!data) {
+      const response = await fetch(`/api/capital-flow${force ? "?refresh=1" : ""}`);
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload?.error?.message || "资金流数据读取失败");
+      data = payload?.data;
+    }
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== capitalFlowRequestId || route.directory !== "capital-flow") return;
-    if (!response.ok) throw new Error(payload?.error?.message || "资金流数据读取失败");
-    if (!Array.isArray(payload?.data?.markets)) throw new Error("资金流数据返回格式不正确");
-    latestCapitalFlowPayload = payload.data;
-    for (const market of payload.data.markets) {
+    if (!Array.isArray(data?.markets)) throw new Error("资金流数据返回格式不正确");
+    latestCapitalFlowPayload = data;
+    for (const market of data.markets) {
       if (!activeCapitalFlowSectors[market.id] && market.sectors?.length) activeCapitalFlowSectors[market.id] = market.sectors[0].id;
     }
-    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(payload.data, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(data, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
     window.clearTimeout(capitalFlowRefreshTimer);
     capitalFlowRefreshTimer = window.setTimeout(() => {
-      if (resolveWorkspaceRoute(window.location.hash).directory === "capital-flow") loadCapitalFlowWorkspaceData();
-    }, getCapitalFlowRefreshDelay(payload.data));
+      if (resolveWorkspaceRoute(window.location.hash).directory === "capital-flow") loadCapitalFlowWorkspaceData(false, false);
+    }, getCapitalFlowRefreshDelay(data));
   } catch (error) {
     const route = resolveWorkspaceRoute(window.location.hash);
     if (requestId !== capitalFlowRequestId || route.directory !== "capital-flow") return;
@@ -925,42 +966,12 @@ function hideCapitalFlowChartPoint(chart) {
 }
 
 document.addEventListener("click", (event) => {
-  const capitalFlowNavigation = event.target.closest('a[href="#signals/capital-flow"]');
-  if (capitalFlowNavigation) {
-    const route = resolveWorkspaceRoute(window.location.hash);
-    if (route.directory === "capital-flow") {
-      event.preventDefault();
-      loadCapitalFlowWorkspaceData(true);
-      return;
-    }
-    capitalFlowForceOnNextRender = true;
-  }
-  const sectorRotationNavigation = event.target.closest('a[href="#signals/sector-rotation"]');
-  if (sectorRotationNavigation) {
-    const route = resolveWorkspaceRoute(window.location.hash);
-    if (route.directory === "sector-rotation") {
-      event.preventDefault();
-      loadSectorRotationWorkspaceData(true);
-      return;
-    }
-    sectorRotationForceOnNextRender = !sectorRotationNavigation.hasAttribute("data-reuse-sector-cache");
-  }
-  const marketTimingNavigation = event.target.closest('a[href="#signals/market-timing"]');
-  if (marketTimingNavigation) {
-    const route = resolveWorkspaceRoute(window.location.hash);
-    if (shouldRefreshMarketTimingNavigation(marketTimingNavigation.getAttribute("href"), route.directory)) {
-      event.preventDefault();
-      loadMarketTimingWorkspaceData(true);
-      return;
-    }
-    marketTimingForceOnNextRender = true;
-  }
   const timingRangeButton = event.target.closest("[data-market-timing-range]");
   if (timingRangeButton && latestMarketTimingPayload) {
     marketTimingRange = timingRangeButton.dataset.marketTimingRange || "1m";
     elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
     elements.signalDetail.querySelector(`[data-market-timing-range="${marketTimingRange}"]`)?.focus();
-    loadMarketTimingWorkspaceData();
+    loadMarketTimingWorkspaceData(false, false);
     return;
   }
   const sectorRangeButton = event.target.closest("[data-sector-range]");
@@ -1019,7 +1030,7 @@ document.addEventListener("change", (event) => {
   marketTimingRange = "custom";
   elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
   elements.signalDetail.querySelector("[data-market-timing-custom-start]")?.focus();
-  loadMarketTimingWorkspaceData();
+  loadMarketTimingWorkspaceData(false, false);
 });
 document.addEventListener("pointermove", (event) => {
   const chart = event.target.closest?.("[data-market-timing-chart]");
@@ -1151,3 +1162,6 @@ elements.themeToggle.addEventListener("click", () => {
 });
 
 render();
+signalPreloader.load().then((payload) => hydrateSignalWorkspaces(payload.workspaces)).catch(() => {
+  // Direct workspace loaders retain their individual endpoint fallback.
+});

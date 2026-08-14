@@ -9,7 +9,6 @@ import {
   renderMarketTimingWorkspace,
   renderMarketTimingWorkspaceError,
   renderMarketTimingWorkspaceLoading,
-  shouldRefreshMarketTimingNavigation,
 } from "../signals/market-timing/view.js";
 
 test("chart hover resolves the nearest date, value, and change from the selected start", () => {
@@ -50,12 +49,6 @@ test("automatic refresh delay respects the server contract and a one-minute floo
   assert.equal(getMarketTimingRefreshDelay({ refreshAfterSeconds: 1800 }), 1_800_000);
   assert.equal(getMarketTimingRefreshDelay({ refreshAfterSeconds: 15 }), 60_000);
   assert.equal(getMarketTimingRefreshDelay({}), 1_800_000);
-});
-
-test("clicking market timing while it is already open requests an immediate refresh", () => {
-  assert.equal(shouldRefreshMarketTimingNavigation("#signals/market-timing", "market-timing"), true);
-  assert.equal(shouldRefreshMarketTimingNavigation("#signals/market-timing", "macro"), false);
-  assert.equal(shouldRefreshMarketTimingNavigation("#signals/macro", "market-timing"), false);
 });
 
 test("market timing separates China equities and United States equities", () => {

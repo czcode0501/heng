@@ -3,17 +3,17 @@
 from __future__ import annotations
 
 import json
-import math
 import re
 import threading
 import time
 from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from market_data_hub import get_baostock_series, get_yfinance_series
 from market_timing import build_china_market, build_us_market
 
 
@@ -22,7 +22,6 @@ REQUEST_TIMEOUT_SECONDS = 15
 MARKET_CACHE_TTL_SECONDS = 30 * 60
 ERROR_CACHE_TTL_SECONDS = 5 * 60
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "market-timing.json"
-BAOSTOCK_LOCK = threading.Lock()
 MARKET_CACHE_LOCK = threading.Lock()
 MARKET_CACHE: dict[str, object] = {"expires": 0.0, "data": None}
 CHINA_SERIES = {
@@ -78,51 +77,10 @@ def parse_sina_jsonp(text: str) -> list[dict]:
     return rows
 
 
-def _fetch_china_baostock() -> dict[str, list[dict]]:
-    # BaoStock package and release metadata: https://pypi.org/project/baostock/
-    import baostock as bs
-
-    start_date = (date.today() - timedelta(days=520)).isoformat()
-    fields = "date,code,open,high,low,close,preclose,volume,amount,pctChg"
-    with BAOSTOCK_LOCK:
-        login = bs.login()
-        if login.error_code != "0":
-            raise RuntimeError(f"BaoStock 登录失败: {login.error_msg}")
-        try:
-            bundle = {}
-            for key, symbols in CHINA_SERIES.items():
-                result = bs.query_history_k_data_plus(
-                    symbols["baostock"],
-                    fields,
-                    start_date=start_date,
-                    frequency="d",
-                    adjustflag="3",
-                )
-                rows = []
-                while result.error_code == "0" and result.next():
-                    values = result.get_row_data()
-                    try:
-                        rows.append(
-                            {
-                                "date": values[0],
-                                "open": float(values[2]),
-                                "high": float(values[3]),
-                                "low": float(values[4]),
-                                "close": float(values[5]),
-                                "volume": float(values[7] or 0),
-                                "amount": float(values[8] or 0),
-                            }
-                        )
-                    except (IndexError, TypeError, ValueError):
-                        continue
-                if result.error_code != "0":
-                    raise RuntimeError(f"BaoStock {symbols['baostock']} 查询失败: {result.error_msg}")
-                if len(rows) < 220:
-                    raise RuntimeError(f"BaoStock {symbols['baostock']} 有效日线不足")
-                bundle[key] = rows
-            return bundle
-        finally:
-            bs.logout()
+def _fetch_china_baostock(force: bool = False) -> dict[str, list[dict]]:
+    symbols = [definition["baostock"] for definition in CHINA_SERIES.values()]
+    shared = get_baostock_series(symbols, force=force, minimum=220)
+    return {key: shared[definition["baostock"]] for key, definition in CHINA_SERIES.items()}
 
 
 def _fetch_sina_series(symbol: str) -> list[dict]:
@@ -148,9 +106,9 @@ def _fetch_china_sina() -> dict[str, list[dict]]:
     return bundle
 
 
-def fetch_china_market() -> dict:
+def fetch_china_market(force: bool = False) -> dict:
     try:
-        bundle = _fetch_china_baostock()
+        bundle = _fetch_china_baostock(force=force)
         source = {
             "name": "BaoStock",
             "provider": "baostock",
@@ -173,74 +131,12 @@ def fetch_china_market() -> dict:
     return build_china_market(bundle, source)
 
 
-def _finite(value: object) -> float | None:
-    try:
-        number = float(value)
-    except (TypeError, ValueError):
-        return None
-    return number if math.isfinite(number) else None
+def _fetch_us_yfinance(force: bool = False) -> dict[str, list[dict]]:
+    shared = get_yfinance_series(US_SERIES.values(), force=force, minimum=220)
+    return {key: shared[symbol] for key, symbol in US_SERIES.items()}
 
 
-def _yahoo_series(frame, symbol: str, *, is_batch: bool) -> list[dict]:
-    rows = []
-    for index, row in frame.iterrows():
-        def field(name: str) -> float | None:
-            try:
-                value = row[(name, symbol)] if is_batch else row[name]
-            except (KeyError, TypeError):
-                return None
-            return _finite(value)
-
-        close = field("Close")
-        if close is None:
-            continue
-        rows.append(
-            {
-                "date": str(index)[:10],
-                "open": field("Open") or close,
-                "high": field("High") or close,
-                "low": field("Low") or close,
-                "close": close,
-                "volume": field("Volume") or 0.0,
-                "amount": 0.0,
-            }
-        )
-    return rows
-
-
-def _fetch_us_yfinance() -> dict[str, list[dict]]:
-    # Multi-ticker download API: https://ranaroussi.github.io/yfinance/reference/index.html
-    # Yahoo market data is documented by yfinance as research/personal-use data.
-    import yfinance as yf
-
-    symbols = list(US_SERIES.values())
-    frame = yf.download(
-        symbols,
-        period="2y",
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        threads=True,
-        timeout=REQUEST_TIMEOUT_SECONDS,
-    )
-    bundle = {}
-    for key, symbol in US_SERIES.items():
-        rows = _yahoo_series(frame, symbol, is_batch=True) if not frame.empty else []
-        if len(rows) < 220:
-            history = yf.Ticker(symbol).history(
-                period="2y",
-                interval="1d",
-                auto_adjust=True,
-                timeout=REQUEST_TIMEOUT_SECONDS,
-            )
-            rows = _yahoo_series(history, symbol, is_batch=False)
-        if len(rows) < 220:
-            raise RuntimeError(f"yfinance {symbol} 有效日线不足")
-        bundle[key] = rows
-    return bundle
-
-
-def fetch_us_market() -> dict:
+def fetch_us_market(force: bool = False) -> dict:
     source = {
         "name": "Yahoo Finance via yfinance",
         "provider": "yfinance",
@@ -249,7 +145,15 @@ def fetch_us_market() -> dict:
         "url": "https://ranaroussi.github.io/yfinance",
         "isFallback": False,
     }
-    return build_us_market(_fetch_us_yfinance(), source)
+    return build_us_market(_fetch_us_yfinance(force=force), source)
+
+
+def has_fresh_market_timing_dashboard(cache_path: Path | None = None) -> bool:
+    """Report cache readiness without triggering an external request."""
+    now = time.time()
+    if MARKET_CACHE["data"] is not None and now < float(MARKET_CACHE["expires"] or 0):
+        return True
+    return _fresh_disk_cache(cache_path or DEFAULT_CACHE_PATH) is not None
 
 
 def _read_disk_cache(path: Path) -> dict | None:
@@ -329,7 +233,10 @@ def get_market_timing_dashboard(
     now = time.time()
     path = cache_path or DEFAULT_CACHE_PATH
     default_fetchers = fetchers is None
-    active_fetchers = fetchers or {"china": fetch_china_market, "united-states": fetch_us_market}
+    active_fetchers = fetchers or {
+        "china": lambda: fetch_china_market(force=force),
+        "united-states": lambda: fetch_us_market(force=force),
+    }
     if default_fetchers and not force and MARKET_CACHE["data"] is not None and now < float(MARKET_CACHE["expires"] or 0):
         return deepcopy(MARKET_CACHE["data"])
     if default_fetchers and not force:

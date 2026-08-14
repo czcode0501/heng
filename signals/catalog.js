@@ -5,6 +5,7 @@ export const signalDirectories = [
     title: "宏观信号",
     english: "MACRO SIGNALS",
     description: "宏观环境相关信号的独立分析模块。具体指标、数据源与判定规则等待定义。",
+    status: "自动更新 · 后台预载",
   },
   {
     id: "market-timing",
@@ -12,6 +13,7 @@ export const signalDirectories = [
     title: "市场择时",
     english: "MARKET TIMING",
     description: "中国股票与美国股票独立计算的市场时机分析模块。",
+    status: "自动更新 · 后台预载",
   },
   {
     id: "sector-rotation",
@@ -19,6 +21,7 @@ export const signalDirectories = [
     title: "板块轮动",
     english: "SECTOR ROTATION",
     description: "中国与美国市场独立排名，把趋势、相对强弱、资金确认与风险转化为轮动阶段。",
+    status: "自动更新 · 后台预载",
   },
   {
     id: "investor-sentiment",
@@ -26,6 +29,7 @@ export const signalDirectories = [
     title: "投资者情绪",
     english: "INVESTOR SENTIMENT",
     description: "投资者情绪信号的独立分析模块。具体代理变量与解释规则等待定义。",
+    status: "等待定义",
   },
   {
     id: "capital-flow",
@@ -33,6 +37,7 @@ export const signalDirectories = [
     title: "资金流向",
     english: "CAPITAL FLOW",
     description: "用九项价格—成交量证据观察中美板块的流入、流出、持续性与价量背离。",
+    status: "自动更新 · 后台预载",
   },
 ];
 
