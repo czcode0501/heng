@@ -3,16 +3,43 @@ import assert from "node:assert/strict";
 
 import { marketTimingMarkets } from "../signals/market-timing/catalog.js";
 import {
+  compareMarketTimingHistory,
   getMarketTimingRefreshDelay,
   renderMarketTimingWorkspace,
   renderMarketTimingWorkspaceError,
   renderMarketTimingWorkspaceLoading,
+  shouldRefreshMarketTimingNavigation,
 } from "../signals/market-timing/view.js";
+
+test("market timing compares the selected start observation with the latest close", () => {
+  const history = [
+    { date: "2025-08-14", value: 80 },
+    { date: "2026-05-14", value: 90 },
+    { date: "2026-08-13", value: 100 },
+    { date: "2026-08-14", value: 105 },
+  ];
+
+  const oneDay = compareMarketTimingHistory(history, { range: "1d" });
+  const custom = compareMarketTimingHistory(history, { range: "custom", customStart: "2026-05-10" });
+
+  assert.equal(oneDay.startDate, "2026-08-13");
+  assert.equal(oneDay.changePercent, 5);
+  assert.equal(custom.startDate, "2026-05-14");
+  assert.equal(custom.endDate, "2026-08-14");
+  assert.equal(custom.changePercent, 16.67);
+  assert.deepEqual(custom.history.map(({ value }) => value), [100, 111.1111, 116.6667]);
+});
 
 test("automatic refresh delay respects the server contract and a one-minute floor", () => {
   assert.equal(getMarketTimingRefreshDelay({ refreshAfterSeconds: 1800 }), 1_800_000);
   assert.equal(getMarketTimingRefreshDelay({ refreshAfterSeconds: 15 }), 60_000);
   assert.equal(getMarketTimingRefreshDelay({}), 1_800_000);
+});
+
+test("clicking market timing while it is already open requests an immediate refresh", () => {
+  assert.equal(shouldRefreshMarketTimingNavigation("#signals/market-timing", "market-timing"), true);
+  assert.equal(shouldRefreshMarketTimingNavigation("#signals/market-timing", "macro"), false);
+  assert.equal(shouldRefreshMarketTimingNavigation("#signals/macro", "market-timing"), false);
 });
 
 test("market timing separates China equities and United States equities", () => {
@@ -68,6 +95,11 @@ test("market timing workspace renders source-backed scores and automatic update 
   assert.match(html, /数据通过/);
   assert.match(html, /60%–80%/);
   assert.match(html, /Yahoo Finance via yfinance|yfinance/);
+  assert.match(html, /data-market-timing-range="1d"/);
+  assert.match(html, /data-market-timing-range="1y"/);
+  assert.match(html, /data-market-timing-custom-start/);
+  assert.match(html, /区间变化/);
+  assert.doesNotMatch(html, /data-refresh-market-timing/);
   assert.doesNotMatch(html, /等待定义|演示数据|实时数据已连接/);
 });
 
@@ -77,5 +109,6 @@ test("market timing has honest loading and source failure states", () => {
 
   assert.match(loading, /正在连接免费数据源/);
   assert.match(error, /上游数据暂时不可用/);
-  assert.match(error, /重新检查/);
+  assert.match(error, /再次点击左侧“市场择时”/);
+  assert.doesNotMatch(`${loading}${error}`, /data-refresh-market-timing/);
 });

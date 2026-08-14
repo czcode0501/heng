@@ -276,6 +276,19 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 
 .timing-detail-header p:last-child { max-width: 760px; }
 .timing-header-actions { display: flex; align-items: center; gap: 8px; }
+.timing-range-panel { display: grid; grid-template-columns: minmax(240px, 1fr) auto; align-items: end; gap: 24px; margin-top: 20px; padding: 16px 20px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.timing-range-panel > div > span { color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.timing-range-panel h3 { margin: 4px 0 0; font-size: 15px; }
+.timing-range-panel p { margin: 6px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.timing-range-controls { display: flex; align-items: end; gap: 10px; }
+.timing-range-presets { display: flex; overflow: hidden; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.timing-range-presets button { min-width: 44px; min-height: 36px; padding: 0 10px; color: var(--muted); background: var(--surface); border: 0; border-right: 1px solid var(--border); font: inherit; font-size: 10px; font-weight: 800; cursor: pointer; }
+.timing-range-presets button:last-child { border-right: 0; }
+.timing-range-presets button:hover { color: var(--text); background: var(--surface-hover); }
+.timing-range-presets button[aria-pressed="true"] { color: var(--accent); background: var(--accent-soft); }
+.timing-range-presets button:focus-visible, .timing-custom-range input:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--accent); outline-offset: -2px; }
+.timing-custom-range { display: grid; gap: 5px; color: var(--muted); font-size: 9px; font-weight: 700; }
+.timing-custom-range input { min-height: 36px; padding: 0 9px; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); font: inherit; font-size: 10px; color-scheme: dark; }
 .timing-auto-note { display: grid; grid-template-columns: minmax(280px, 1.2fr) minmax(420px, 1fr); align-items: center; gap: 24px; margin-top: 20px; padding: 16px 20px; background: var(--surface-raised); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); }
 .timing-auto-note strong { font-size: 12px; }
 .timing-auto-note p { margin: 5px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
@@ -309,8 +322,14 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 .timing-benchmark-block header span { color: var(--muted); font-size: 9px; }
 .timing-benchmark-block header strong { margin-top: 3px; font-family: var(--font-mono); font-size: 16px; font-variant-numeric: tabular-nums; }
 .timing-benchmark-block header em { font-size: 10px; font-style: normal; font-weight: 800; }
+.timing-period-change { text-align: right; }
+.timing-period-change > span { margin-bottom: 3px; }
 .timing-benchmark-block svg { display: block; width: 100%; height: 62px; margin-top: 8px; overflow: visible; }
 .timing-benchmark-block path { fill: none; stroke: var(--market-accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 1.5; }
+.timing-period-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 7px 0 0; padding-top: 8px; border-top: 1px solid var(--border); }
+.timing-period-stats dt, .timing-period-stats dd { margin: 0; font-size: 8px; }
+.timing-period-stats dt { color: var(--muted); }
+.timing-period-stats dd { margin-top: 3px; overflow: hidden; font-family: var(--font-mono); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .timing-regime-facts { display: grid; gap: 1px; margin: 0; overflow: hidden; background: var(--border); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .timing-regime-facts div { display: grid; align-content: center; padding: 8px 10px; background: var(--surface-raised); }
 .timing-regime-facts dt, .timing-regime-facts dd { margin: 0; font-size: 9px; }
@@ -577,6 +596,10 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .definition-placeholder { grid-template-columns: 1fr; gap: 20px; padding: 32px 0 8px; }
   .placeholder-index { font-size: 40px; }
   .definition-list { grid-column: auto; }
+  .timing-range-panel { grid-template-columns: 1fr; align-items: start; gap: 14px; }
+  .timing-range-controls { justify-content: space-between; }
+  .timing-range-presets button { min-height: 44px; }
+  .timing-custom-range input { min-height: 44px; }
   .timing-auto-note { grid-template-columns: 1fr; gap: 14px; }
   .timing-market-grid { grid-template-columns: 1fr; }
   .macro-separation-note { grid-template-columns: 1fr 1fr; gap: 12px; }
@@ -612,6 +635,10 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .analysis-metrics { grid-template-columns: 1fr; }
   .timing-detail-header { align-items: flex-start; flex-direction: column; }
   .timing-header-actions { width: 100%; justify-content: space-between; }
+  .timing-range-controls { align-items: stretch; flex-direction: column; }
+  .timing-range-presets { width: 100%; }
+  .timing-range-presets button { flex: 1; min-width: 0; }
+  .timing-period-stats { grid-template-columns: 1fr; }
   .timing-auto-note dl { grid-template-columns: 1fr; }
   .timing-live-market-header { grid-template-columns: auto minmax(0, 1fr); }
   .timing-live-market-header .timing-data-state { grid-column: 1 / -1; width: fit-content; }

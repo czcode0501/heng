@@ -8,6 +8,7 @@ import {
   renderMarketTimingWorkspace,
   renderMarketTimingWorkspaceError,
   renderMarketTimingWorkspaceLoading,
+  shouldRefreshMarketTimingNavigation,
 } from "./signals/market-timing/view.js";
 
 const stockCatalog = [
@@ -69,6 +70,9 @@ let latestMacroPayload = null;
 let marketTimingRequestId = 0;
 let marketTimingRefreshTimer;
 let latestMarketTimingPayload = null;
+let marketTimingRange = "1m";
+let marketTimingCustomStart = "";
+let marketTimingForceOnNextRender = false;
 let activeAnalysisResult = null;
 
 const elements = {
@@ -257,9 +261,11 @@ function renderSignalDetail(directory) {
 
   if (directory.id === "market-timing") {
     elements.signalDetail.innerHTML = latestMarketTimingPayload
-      ? renderMarketTimingWorkspace(latestMarketTimingPayload)
+      ? renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart })
       : renderMarketTimingWorkspaceLoading(marketTimingMarkets);
-    loadMarketTimingWorkspaceData();
+    const force = marketTimingForceOnNextRender;
+    marketTimingForceOnNextRender = false;
+    loadMarketTimingWorkspaceData(force);
     return;
   }
 
@@ -314,11 +320,8 @@ async function loadMacroWorkspaceData(force = false) {
 
 async function loadMarketTimingWorkspaceData(force = false) {
   const requestId = ++marketTimingRequestId;
-  const refreshButton = elements.signalDetail.querySelector("[data-refresh-market-timing]");
-  if (refreshButton) {
-    refreshButton.disabled = true;
-    refreshButton.textContent = force ? "正在重新检查…" : "正在检查…";
-  }
+  const status = elements.signalDetail.querySelector(".timing-header-actions .quality-status");
+  if (status) status.textContent = force ? "正在刷新数据…" : "正在检查数据…";
   try {
     const response = await fetch(`/api/market-timing${force ? "?refresh=1" : ""}`);
     const payload = await response.json();
@@ -327,7 +330,7 @@ async function loadMarketTimingWorkspaceData(force = false) {
     if (!response.ok) throw new Error(payload?.error?.message || "市场择时数据读取失败");
     if (!Array.isArray(payload?.data?.markets)) throw new Error("市场择时数据返回格式不正确");
     latestMarketTimingPayload = payload.data;
-    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(payload.data);
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(payload.data, { range: marketTimingRange, customStart: marketTimingCustomStart });
     window.clearTimeout(marketTimingRefreshTimer);
     marketTimingRefreshTimer = window.setTimeout(() => {
       if (resolveWorkspaceRoute(window.location.hash).directory === "market-timing") loadMarketTimingWorkspaceData();
@@ -642,6 +645,23 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("click", (event) => {
+  const marketTimingNavigation = event.target.closest('a[href="#signals/market-timing"]');
+  if (marketTimingNavigation) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (shouldRefreshMarketTimingNavigation(marketTimingNavigation.getAttribute("href"), route.directory)) {
+      event.preventDefault();
+      loadMarketTimingWorkspaceData(true);
+      return;
+    }
+    marketTimingForceOnNextRender = true;
+  }
+  const timingRangeButton = event.target.closest("[data-market-timing-range]");
+  if (timingRangeButton && latestMarketTimingPayload) {
+    marketTimingRange = timingRangeButton.dataset.marketTimingRange || "1m";
+    elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
+    elements.signalDetail.querySelector(`[data-market-timing-range="${marketTimingRange}"]`)?.focus();
+    return;
+  }
   const rangeButton = event.target.closest("[data-macro-range]");
   if (rangeButton && latestMacroPayload) {
     macroTimeRange = Number(rangeButton.dataset.macroRange) || 24;
@@ -653,11 +673,15 @@ document.addEventListener("click", (event) => {
     loadMacroWorkspaceData(true);
     return;
   }
-  if (event.target.closest("[data-refresh-market-timing]")) {
-    loadMarketTimingWorkspaceData(true);
-    return;
-  }
   if (!event.target.closest(".search-wrap")) elements.searchResults.hidden = true;
+});
+document.addEventListener("change", (event) => {
+  if (!event.target.matches("[data-market-timing-custom-start]") || !latestMarketTimingPayload) return;
+  marketTimingCustomStart = event.target.value;
+  if (!marketTimingCustomStart) return;
+  marketTimingRange = "custom";
+  elements.signalDetail.innerHTML = renderMarketTimingWorkspace(latestMarketTimingPayload, { range: marketTimingRange, customStart: marketTimingCustomStart });
+  elements.signalDetail.querySelector("[data-market-timing-custom-start]")?.focus();
 });
 window.addEventListener("hashchange", renderWorkspaceRoute);
 
