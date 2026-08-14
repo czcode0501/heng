@@ -7,7 +7,7 @@ from market_timing import (
     build_china_market,
     build_us_market,
 )
-from market_timing_sources import fetch_china_market, get_market_timing_dashboard, parse_sina_jsonp
+from market_timing_sources import MARKET_CACHE, fetch_china_market, get_market_timing_dashboard, parse_sina_jsonp
 
 
 def make_series(start, step, *, count=260, volume_start=1_000_000, volume_step=1_000):
@@ -142,6 +142,31 @@ class MarketTimingContractTests(unittest.TestCase):
             )
             self.assertTrue(all(market["status"] == "stale" for market in stale["markets"]))
             self.assertTrue(all(market["dataQuality"]["status"] == "stale" for market in stale["markets"]))
+
+    def test_fresh_disk_cache_makes_restart_zero_configuration_and_fast(self):
+        rising = make_series(3_000, 4)
+        china = build_china_market(
+            {key: rising for key in ["csi300", "sse", "szse", "chinext", "csi1000"]},
+            source={"name": "BaoStock", "mode": "zero-config"},
+        )
+        us = build_us_market(
+            {key: rising for key in ["sp500", "spy", "rsp", "iwm", "qqq", "hyg", "lqd", "vix"]},
+            source={"name": "Yahoo Finance via yfinance", "mode": "zero-config"},
+        )
+        with TemporaryDirectory() as directory:
+            cache_path = Path(directory) / "market-timing.json"
+            get_market_timing_dashboard(
+                force=True,
+                fetchers={"china": lambda: china, "united-states": lambda: us},
+                cache_path=cache_path,
+            )
+            MARKET_CACHE.update({"expires": 0.0, "data": None})
+            with patch("market_timing_sources.fetch_china_market") as china_fetch, patch("market_timing_sources.fetch_us_market") as us_fetch:
+                dashboard = get_market_timing_dashboard(force=False, cache_path=cache_path)
+
+            self.assertEqual(dashboard["dataQuality"]["status"], "live")
+            china_fetch.assert_not_called()
+            us_fetch.assert_not_called()
 
 
 if __name__ == "__main__":

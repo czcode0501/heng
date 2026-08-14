@@ -79,6 +79,7 @@ def parse_sina_jsonp(text: str) -> list[dict]:
 
 
 def _fetch_china_baostock() -> dict[str, list[dict]]:
+    # BaoStock package and release metadata: https://pypi.org/project/baostock/
     import baostock as bs
 
     start_date = (date.today() - timedelta(days=520)).isoformat()
@@ -208,6 +209,8 @@ def _yahoo_series(frame, symbol: str, *, is_batch: bool) -> list[dict]:
 
 
 def _fetch_us_yfinance() -> dict[str, list[dict]]:
+    # Multi-ticker download API: https://ranaroussi.github.io/yfinance/reference/index.html
+    # Yahoo market data is documented by yfinance as research/personal-use data.
     import yfinance as yf
 
     symbols = list(US_SERIES.values())
@@ -257,6 +260,20 @@ def _read_disk_cache(path: Path) -> dict | None:
     if not isinstance(payload, dict) or not isinstance(payload.get("markets"), list):
         return None
     return payload
+
+
+def _fresh_disk_cache(path: Path) -> dict | None:
+    payload = _read_disk_cache(path)
+    if not payload:
+        return None
+    try:
+        generated_at = datetime.fromisoformat(str(payload["generatedAt"]).replace("Z", "+00:00"))
+        if generated_at.tzinfo is None:
+            generated_at = generated_at.replace(tzinfo=timezone.utc)
+    except (KeyError, TypeError, ValueError):
+        return None
+    age = (datetime.now(timezone.utc) - generated_at).total_seconds()
+    return payload if 0 <= age < MARKET_CACHE_TTL_SECONDS else None
 
 
 def _write_disk_cache(path: Path, payload: dict) -> None:
@@ -315,10 +332,22 @@ def get_market_timing_dashboard(
     active_fetchers = fetchers or {"china": fetch_china_market, "united-states": fetch_us_market}
     if default_fetchers and not force and MARKET_CACHE["data"] is not None and now < float(MARKET_CACHE["expires"] or 0):
         return deepcopy(MARKET_CACHE["data"])
+    if default_fetchers and not force:
+        disk_cached = _fresh_disk_cache(path)
+        if disk_cached is not None:
+            MARKET_CACHE["data"] = deepcopy(disk_cached)
+            MARKET_CACHE["expires"] = now + MARKET_CACHE_TTL_SECONDS
+            return disk_cached
 
     with MARKET_CACHE_LOCK:
         if default_fetchers and not force and MARKET_CACHE["data"] is not None and now < float(MARKET_CACHE["expires"] or 0):
             return deepcopy(MARKET_CACHE["data"])
+        if default_fetchers and not force:
+            disk_cached = _fresh_disk_cache(path)
+            if disk_cached is not None:
+                MARKET_CACHE["data"] = deepcopy(disk_cached)
+                MARKET_CACHE["expires"] = now + MARKET_CACHE_TTL_SECONDS
+                return disk_cached
         previous = _read_disk_cache(path)
         previous_markets = {market.get("id"): market for market in (previous or {}).get("markets", [])}
         completed, errors = {}, {}
