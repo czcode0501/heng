@@ -488,11 +488,28 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 .macro-current-value > span { color: var(--muted); font-size: 9px; text-align: right; }
 .macro-chart { margin: 12px 0 0; }
 .macro-chart svg { width: 100%; height: 72px; display: block; overflow: visible; }
+.macro-chart-shell { position: relative; }
+.macro-chart-shell svg { cursor: crosshair; }
+.macro-chart-shell svg:focus-visible { outline: 2px solid var(--market-accent); outline-offset: 2px; }
 .macro-chart-area { fill: var(--market-soft); stroke: none; }
 .macro-chart-line { fill: none; stroke: var(--market-accent); stroke-linecap: round; stroke-linejoin: round; stroke-width: 2; vector-effect: non-scaling-stroke; }
 .macro-chart circle { fill: var(--surface); stroke: var(--market-accent); stroke-width: 2; vector-effect: non-scaling-stroke; }
 .macro-chart-benchmark { stroke: var(--subtle); stroke-dasharray: 4 4; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.macro-chart-hit-zone { fill: transparent; pointer-events: all; }
+.macro-chart-cursor { opacity: 0; stroke: var(--border-strong); stroke-dasharray: 2 2; stroke-width: 1; pointer-events: none; }
+.macro-chart-hover-dot { opacity: 0; pointer-events: none; }
+.macro-chart-shell.is-active .macro-chart-cursor, .macro-chart-shell.is-active .macro-chart-hover-dot { opacity: 1; }
+.macro-chart-tooltip { position: absolute; top: 0; left: var(--tooltip-x, 50%); z-index: 2; display: grid; min-width: 116px; padding: 7px 9px; color: var(--text); background: color-mix(in srgb, var(--surface) 96%, transparent); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow); transform: translateX(8px); pointer-events: none; }
+.macro-chart-tooltip.is-flipped { transform: translateX(calc(-100% - 8px)); }
+.macro-chart-tooltip strong, .macro-chart-tooltip span, .macro-chart-tooltip em { font-size: 8px; line-height: 1.45; }
+.macro-chart-tooltip strong { font-family: var(--font-mono); font-size: 9px; }
+.macro-chart-tooltip span { color: var(--muted); }
+.macro-chart-tooltip em { margin-top: 2px; color: var(--market-accent); font-style: normal; font-weight: 800; }
 .macro-chart figcaption { margin-top: 4px; color: var(--subtle); font-size: 8px; }
+.macro-period-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 9px 0 0; padding-top: 9px; border-top: 1px solid var(--border); }
+.macro-period-stats dt, .macro-period-stats dd { margin: 0; font-size: 8px; }
+.macro-period-stats dt { color: var(--muted); }
+.macro-period-stats dd { margin-top: 3px; overflow: hidden; font-family: var(--font-mono); font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
 .macro-metric-card > footer { align-items: flex-start; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--muted); font-size: 9px; }
 .macro-metric-card > footer a { max-width: 68%; color: var(--muted); text-align: right; text-decoration: underline; text-underline-offset: 2px; }
 .macro-metric-card > footer a:hover { color: var(--market-accent); }
@@ -669,6 +686,7 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .macro-dimension-grid, .macro-driver-section ul, .macro-strategy-section ul { grid-template-columns: 1fr; }
   .macro-market-header .data-status { grid-column: 1 / -1; width: fit-content; }
   .macro-current-value { align-items: flex-start; flex-direction: column; gap: 4px; }
+  .macro-period-stats { grid-template-columns: 1fr; }
   .macro-current-value > span { text-align: left; }
   .macro-metric-card > footer { flex-direction: column; gap: 6px; }
   .macro-metric-card > footer a { max-width: 100%; text-align: left; }

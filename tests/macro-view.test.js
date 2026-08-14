@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { buildSparkline, renderMacroWorkspace, selectRangePoints } from "../signals/macro/view.js";
+import { buildSparkline, getMacroChartPoint, renderMacroWorkspace, selectRangePoints, summarizeMacroRange } from "../signals/macro/view.js";
 
 const indicator = {
   id: "cn-pmi",
@@ -58,6 +58,34 @@ test("time range keeps the latest requested observations", () => {
   assert.deepEqual(selectRangePoints(points, 60), points);
 });
 
+test("range summary changes its start and interval movement with the selected window", () => {
+  const points = Array.from({ length: 60 }, (_, index) => ({
+    date: `${2021 + Math.floor(index / 12)}-${String((index % 12) + 1).padStart(2, "0")}`,
+    value: 100 + index,
+  }));
+
+  assert.deepEqual(summarizeMacroRange(points, 12), {
+    startDate: "2025-01",
+    endDate: "2025-12",
+    startValue: 148,
+    endValue: 159,
+    change: 11,
+    high: 159,
+    low: 148,
+    observations: 12,
+  });
+  assert.equal(summarizeMacroRange(points, 60).change, 59);
+});
+
+test("macro chart hover resolves the nearest period and value", () => {
+  assert.deepEqual(getMacroChartPoint(indicator.points, 0.6), {
+    index: 2,
+    date: "2026-06",
+    value: 50.3,
+    change: 1.3,
+  });
+});
+
 test("macro workspace renders real values, stage, source, and trend chart", () => {
   const html = renderMacroWorkspace({
     generatedAt: "2026-08-14T15:57:00Z",
@@ -75,10 +103,15 @@ test("macro workspace renders real values, stage, source, and trend chart", () =
   assert.match(html, /国家统计局/);
   assert.match(html, /自动更新/);
   assert.match(html, /data-macro-range="12"[^>]*aria-pressed="true"/);
+  assert.match(html, /data-macro-chart/);
+  assert.match(html, /macro-chart-tooltip/);
+  assert.match(html, /区间变化/);
   assert.match(html, /结构性修复/);
   assert.match(html, /选择性进攻/);
   assert.match(html, /模型输出仅用于研究/);
   assert.doesNotMatch(html, /待接入|NaN|undefined/);
+  assert.ok(html.indexOf("macro-analysis-grid") < html.indexOf("macro-range-bar"));
+  assert.ok(html.indexOf("macro-range-bar") < html.indexOf("macro-raw-data-heading"));
 });
 
 test("macro workspace explains a source failure instead of inventing data", () => {

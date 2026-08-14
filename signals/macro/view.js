@@ -54,18 +54,56 @@ export function selectRangePoints(points, range) {
   return (points || []).slice(-safeRange);
 }
 
+export function summarizeMacroRange(points, range) {
+  const selected = selectRangePoints(points, range);
+  if (!selected.length) return null;
+  const start = selected[0];
+  const end = selected.at(-1);
+  const values = selected.map(({ value }) => Number(value)).filter(Number.isFinite);
+  return {
+    startDate: start.date,
+    endDate: end.date,
+    startValue: Number(start.value),
+    endValue: Number(end.value),
+    change: Number((Number(end.value) - Number(start.value)).toFixed(4)),
+    high: Math.max(...values),
+    low: Math.min(...values),
+    observations: selected.length,
+  };
+}
+
+export function getMacroChartPoint(points, ratio) {
+  if (!Array.isArray(points) || !points.length) return null;
+  const safeRatio = Math.max(0, Math.min(1, Number(ratio) || 0));
+  const index = Math.round(safeRatio * (points.length - 1));
+  const point = points[index];
+  return {
+    index,
+    date: point.date,
+    value: Number(point.value),
+    change: Number((Number(point.value) - Number(points[0].value)).toFixed(4)),
+  };
+}
+
 function renderTrendChart(indicator, points) {
   const chart = buildSparkline(points, { benchmark: indicator.benchmark });
   const first = points[0];
   const last = points.at(-1);
+  const chartPoints = escapeHtml(JSON.stringify(points.map(({ date, value }) => ({ date, value: Number(value) }))));
   const benchmark = chart.benchmarkY === null ? "" : `<line class="macro-chart-benchmark" x1="5" y1="${chart.benchmarkY.toFixed(2)}" x2="355" y2="${chart.benchmarkY.toFixed(2)}"></line>`;
   return `<figure class="macro-chart">
-    <svg viewBox="0 0 360 72" role="img" aria-label="${escapeHtml(indicator.name)}从${escapeHtml(formatPeriod(first.date))}至${escapeHtml(formatPeriod(last.date))}的走势">
-      ${benchmark}
-      <path class="macro-chart-area" d="${chart.areaPath}"></path>
-      <path class="macro-chart-line" d="${chart.path}"></path>
-      <circle cx="${chart.lastX.toFixed(2)}" cy="${chart.lastY.toFixed(2)}" r="3"></circle>
-    </svg>
+    <div class="macro-chart-shell">
+      <svg viewBox="0 0 360 72" role="application" tabindex="0" data-macro-chart data-chart-points="${chartPoints}" data-chart-benchmark="${indicator.benchmark ?? ""}" data-chart-unit="${escapeHtml(indicator.unit)}" aria-label="${escapeHtml(indicator.name)}交互式走势图。移动鼠标或使用左右方向键查看具体时间和数值。">
+        ${benchmark}
+        <path class="macro-chart-area" d="${chart.areaPath}"></path>
+        <path class="macro-chart-line" d="${chart.path}"></path>
+        <circle class="macro-chart-end-dot" cx="${chart.lastX.toFixed(2)}" cy="${chart.lastY.toFixed(2)}" r="3"></circle>
+        <line class="macro-chart-cursor" x1="0" x2="0" y1="5" y2="67"></line>
+        <circle class="macro-chart-hover-dot" cx="0" cy="0" r="3.5"></circle>
+        <rect class="macro-chart-hit-zone" width="360" height="72"></rect>
+      </svg>
+      <div class="macro-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div>
+    </div>
     <figcaption><span>${escapeHtml(formatPeriod(first.date))}</span><span>${indicator.benchmark === null ? "" : `参考线 ${formatNumber(indicator.benchmark)}`}</span><span>${escapeHtml(formatPeriod(last.date))}</span></figcaption>
   </figure>`;
 }
@@ -73,6 +111,7 @@ function renderTrendChart(indicator, points) {
 function renderIndicator(indicator, range) {
   const summary = indicator.summary;
   const points = selectRangePoints(indicator.points, range);
+  const period = summarizeMacroRange(indicator.points, range);
   const latestValue = Number(points.at(-1)?.value);
   const percentile = Math.round((points.filter(({ value }) => Number(value) <= latestValue).length / points.length) * 100);
   const change = summary.change === null ? "暂无上期比较" : `较上期 ${summary.change > 0 ? "+" : ""}${formatNumber(summary.change)}${indicator.unit}`;
@@ -86,6 +125,11 @@ function renderIndicator(indicator, range) {
       <span>${escapeHtml(change)} · ${escapeHtml(formatPeriod(summary.date))}</span>
     </div>
     ${renderTrendChart(indicator, points)}
+    <dl class="macro-period-stats">
+      <div><dt>区间起点</dt><dd>${escapeHtml(formatPeriod(period.startDate))} · ${formatNumber(period.startValue)}${escapeHtml(indicator.unit)}</dd></div>
+      <div><dt>区间变化</dt><dd class="${period.change >= 0 ? "positive" : "negative"}">${period.change >= 0 ? "+" : ""}${formatNumber(period.change)}${escapeHtml(indicator.unit)}</dd></div>
+      <div><dt>区间高 / 低</dt><dd>${formatNumber(period.high)} / ${formatNumber(period.low)}${escapeHtml(indicator.unit)}</dd></div>
+    </dl>
     <footer>
       <span>当前区间分位 <strong>${percentile}%</strong></span>
       <a href="${escapeHtml(indicator.source.url)}" target="_blank" rel="noreferrer">${escapeHtml(indicator.source.name)} · ${escapeHtml(indicator.source.original)}</a>
@@ -161,7 +205,7 @@ function renderRangeControl(range) {
     <div class="macro-range-control" role="group" aria-label="选择走势图时间范围">
       ${options.map((option) => `<button type="button" data-macro-range="${option.value}" aria-pressed="${Number(range) === option.value}">${option.label}</button>`).join("")}
     </div>
-    <p>切换后更新全部走势图和区间分位；最新值与模型阶段不变。</p>
+    <p>控制下方全部原始指标：切换后重新计算区间起点、变化、高低值和分位；当前值始终代表最新数据。</p>
   </section>`;
 }
 
@@ -183,8 +227,8 @@ export function renderMacroWorkspace(data, { range = 24 } = {}) {
       <p>自动更新 · 6小时缓存 · 本次检查 ${escapeHtml(formatTimestamp(data.generatedAt))}</p><i aria-hidden="true"></i>
       <div><span>美国数据</span><strong>${counts["united-states"] || 0} 项已连接</strong></div>
     </section>
-    ${renderRangeControl(range)}
     <section class="macro-analysis-grid" aria-label="中国与美国宏观环境综合研判">${data.markets.map(renderMarketAnalysis).join("")}</section>
+    ${renderRangeControl(range)}
     <header class="macro-raw-data-heading"><div><span>RAW INDICATORS</span><h2>原始指标与走势</h2></div><p>模型结论来自下列实时指标；保留原始数据便于逐项核验。</p></header>
     <section class="macro-market-grid" aria-label="中国与美国宏观指标">${data.markets.map((market) => renderMarketPanel(market, range)).join("")}</section>`;
 }

@@ -1,7 +1,7 @@
 import { getSearchResultActions, getTrendPresentation } from "./search-flow.js";
 import { resolveWorkspaceRoute, signalDirectories } from "./signals/catalog.js";
 import { macroMarkets } from "./signals/macro/catalog.js";
-import { renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
+import { getMacroChartPoint, renderMacroWorkspace, renderMacroWorkspaceError, renderMacroWorkspaceLoading } from "./signals/macro/view.js";
 import { marketTimingMarkets } from "./signals/market-timing/catalog.js";
 import {
   getMarketTimingChartPoint,
@@ -699,6 +699,47 @@ function hideMarketTimingChartPoint(chart) {
   if (tooltip) tooltip.hidden = true;
 }
 
+function showMacroChartPoint(chart, ratio) {
+  const points = marketTimingChartPoints(chart);
+  const point = getMacroChartPoint(points, ratio);
+  if (!point) return;
+  const shell = chart.closest(".macro-chart-shell");
+  const tooltip = shell?.querySelector(".macro-chart-tooltip");
+  const cursor = chart.querySelector(".macro-chart-cursor");
+  const dot = chart.querySelector(".macro-chart-hover-dot");
+  if (!shell || !tooltip || !cursor || !dot) return;
+  const benchmark = Number(chart.dataset.chartBenchmark);
+  const values = points.map(({ value }) => Number(value)).filter(Number.isFinite);
+  if (chart.dataset.chartBenchmark !== "" && Number.isFinite(benchmark)) values.push(benchmark);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || 1;
+  const x = points.length > 1 ? 5 + point.index / (points.length - 1) * 350 : 180;
+  const y = 5 + (maximum - point.value) / span * 62;
+  const percent = x / 360 * 100;
+  const unit = chart.dataset.chartUnit || "";
+  const [year, month] = String(point.date).split("-");
+  cursor.setAttribute("x1", x.toFixed(2));
+  cursor.setAttribute("x2", x.toFixed(2));
+  dot.setAttribute("cx", x.toFixed(2));
+  dot.setAttribute("cy", y.toFixed(2));
+  tooltip.querySelector("strong").textContent = month ? `${year}年${Number(month)}月` : String(point.date);
+  tooltip.querySelector("span").textContent = `数值 ${point.value.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}${unit}`;
+  tooltip.querySelector("em").textContent = `较区间起点 ${point.change >= 0 ? "+" : ""}${point.change.toLocaleString("zh-CN", { maximumFractionDigits: 2 })}${unit}`;
+  tooltip.hidden = false;
+  tooltip.classList.toggle("is-flipped", percent > 64);
+  shell.style.setProperty("--tooltip-x", `${percent}%`);
+  shell.classList.add("is-active");
+  chart.dataset.activeIndex = String(point.index);
+}
+
+function hideMacroChartPoint(chart) {
+  const shell = chart.closest(".macro-chart-shell");
+  shell?.classList.remove("is-active");
+  const tooltip = shell?.querySelector(".macro-chart-tooltip");
+  if (tooltip) tooltip.hidden = true;
+}
+
 document.addEventListener("click", (event) => {
   const marketTimingNavigation = event.target.closest('a[href="#signals/market-timing"]');
   if (marketTimingNavigation) {
@@ -746,16 +787,33 @@ document.addEventListener("pointermove", (event) => {
   const bounds = chart.getBoundingClientRect();
   showMarketTimingChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
 });
+document.addEventListener("pointermove", (event) => {
+  const chart = event.target.closest?.("[data-macro-chart]");
+  if (!chart) return;
+  const bounds = chart.getBoundingClientRect();
+  showMacroChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
+});
 document.addEventListener("pointerout", (event) => {
   const chart = event.target.closest?.("[data-market-timing-chart]");
   if (!chart || chart.contains(event.relatedTarget)) return;
   hideMarketTimingChartPoint(chart);
 });
+document.addEventListener("pointerout", (event) => {
+  const chart = event.target.closest?.("[data-macro-chart]");
+  if (!chart || chart.contains(event.relatedTarget)) return;
+  hideMacroChartPoint(chart);
+});
 document.addEventListener("focusin", (event) => {
   if (event.target.matches?.("[data-market-timing-chart]")) showMarketTimingChartPoint(event.target, 1);
 });
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches?.("[data-macro-chart]")) showMacroChartPoint(event.target, 1);
+});
 document.addEventListener("focusout", (event) => {
   if (event.target.matches?.("[data-market-timing-chart]")) hideMarketTimingChartPoint(event.target);
+});
+document.addEventListener("focusout", (event) => {
+  if (event.target.matches?.("[data-macro-chart]")) hideMacroChartPoint(event.target);
 });
 document.addEventListener("keydown", (event) => {
   const chart = event.target.matches?.("[data-market-timing-chart]") ? event.target : null;
@@ -766,6 +824,16 @@ document.addEventListener("keydown", (event) => {
   const current = Number(chart.dataset.activeIndex || points.length - 1);
   const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
   showMarketTimingChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
+});
+document.addEventListener("keydown", (event) => {
+  const chart = event.target.matches?.("[data-macro-chart]") ? event.target : null;
+  if (!chart || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const points = marketTimingChartPoints(chart);
+  if (!points.length) return;
+  const current = Number(chart.dataset.activeIndex || points.length - 1);
+  const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
+  showMacroChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
 });
 window.addEventListener("hashchange", renderWorkspaceRoute);
 
