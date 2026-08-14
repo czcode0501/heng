@@ -12,6 +12,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from macro_data import get_macro_dashboard
+from market_timing_sources import get_market_timing_dashboard
 
 
 SEARCH_LIMIT = 10
@@ -288,6 +289,11 @@ class MarketDataHandler(BaseHTTPRequestHandler):
             if parsed.path == "/api/macro":
                 force = params.get("refresh", ["0"])[0] == "1"
                 data = get_macro_dashboard(force=force)
+                self.send_json(200, {"data": data})
+                return
+            if parsed.path == "/api/market-timing":
+                force = params.get("refresh", ["0"])[0] == "1"
+                data = get_market_timing_dashboard(force=force)
                 self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/health":

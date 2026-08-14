@@ -1,7 +1,9 @@
 node_modules/
 dist/
+.cache/
 .env
 .env.local
+.env.*.local
 *.log
 __pycache__/
-*.pyc
+*.py[cod]
