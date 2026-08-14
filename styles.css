@@ -287,6 +287,68 @@ td { padding: 14px 16px; border-top: 1px solid var(--border); text-align: right;
 .macro-separation-note strong { margin-top: 4px; font-size: 13px; }
 .macro-separation-note i { width: 1px; height: 28px; background: var(--border); }
 .macro-separation-note p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; text-align: center; }
+.macro-range-bar { display: grid; grid-template-columns: minmax(140px, auto) auto minmax(240px, 1fr); align-items: center; gap: 16px; margin-top: 16px; padding: 12px 16px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.macro-range-bar > div:first-child span, .macro-range-bar > div:first-child strong { display: block; }
+.macro-range-bar > div:first-child span { color: var(--muted); font-size: 10px; font-weight: 700; }
+.macro-range-bar > div:first-child strong { margin-top: 4px; font-size: 12px; }
+.macro-range-bar > p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.5; text-align: right; }
+.macro-range-control { display: inline-flex; gap: 4px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.macro-range-control button { min-width: 56px; min-height: 32px; padding: 0 12px; color: var(--muted); background: transparent; border: 0; border-radius: 4px; font-size: 11px; font-weight: 800; cursor: pointer; }
+.macro-range-control button:hover { color: var(--text); background: var(--surface-hover); }
+.macro-range-control button[aria-pressed="true"] { color: var(--text); background: var(--surface); box-shadow: inset 0 0 0 1px var(--border-strong); }
+.macro-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 16px; margin-top: 16px; }
+.macro-analysis-panel { --market-accent: var(--muted); --market-soft: var(--surface-raised); --market-border: var(--border); min-width: 0; padding: 20px; background: var(--surface); border: 1px solid var(--market-border); border-top: 3px solid var(--market-accent); border-radius: var(--radius-md); }
+.macro-analysis-panel.china { --market-accent: var(--china-accent); --market-soft: var(--china-soft); --market-border: var(--china-border); }
+.macro-analysis-panel.united-states { --market-accent: var(--us-accent); --market-soft: var(--us-soft); --market-border: var(--us-border); }
+.macro-analysis-panel.unavailable { min-height: 220px; display: grid; align-content: center; gap: 8px; color: var(--muted); }
+.macro-analysis-panel.unavailable > * { margin: 0; }
+.macro-analysis-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.macro-analysis-heading span, .macro-analysis-heading p, .macro-analysis-heading h2 { margin: 0; }
+.macro-analysis-heading span { color: var(--market-accent); font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.macro-analysis-heading p { margin-top: 8px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.macro-analysis-heading h2 { margin-top: 4px; font-size: 25px; letter-spacing: -.02em; }
+.macro-conviction { min-width: 132px; display: grid; justify-items: end; gap: 12px; }
+.macro-conviction > em { padding: 5px 8px; color: var(--market-accent); background: var(--market-soft); border: 1px solid var(--market-border); border-radius: 4px; font-size: 10px; font-style: normal; font-weight: 800; }
+.macro-conviction label { width: 100%; color: var(--muted); font-size: 9px; }
+.macro-conviction label strong { float: right; color: var(--text); font-variant-numeric: tabular-nums; }
+.macro-conviction progress { width: 100%; height: 5px; display: block; margin-top: 6px; overflow: hidden; appearance: none; background: var(--track); border: 0; border-radius: 999px; }
+.macro-conviction progress::-webkit-progress-bar { background: var(--track); }
+.macro-conviction progress::-webkit-progress-value { background: var(--market-accent); }
+.macro-conviction progress::-moz-progress-bar { background: var(--market-accent); }
+.macro-analysis-summary { margin: 20px 0 0; padding: 14px 16px; color: var(--text); background: var(--market-soft); border-left: 3px solid var(--market-accent); font-size: 12px; line-height: 1.65; }
+.macro-score-note { margin: 12px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.macro-dimension-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 16px; }
+.macro-dimension { padding: 12px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.macro-dimension > header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.macro-dimension > header span { color: var(--muted); font-size: 10px; font-weight: 700; }
+.macro-dimension > header strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+.macro-score-track { position: relative; height: 5px; margin-top: 10px; background: var(--track); border-radius: 999px; }
+.macro-score-track::before { position: absolute; top: -3px; bottom: -3px; left: 50%; width: 1px; background: var(--border-strong); content: ""; }
+.macro-score-track i { position: absolute; top: 50%; left: var(--score-position); width: 9px; height: 9px; background: var(--surface); border: 2px solid var(--market-accent); border-radius: 50%; transform: translate(-50%, -50%); }
+.macro-dimension p { margin: 10px 0 0; color: var(--muted); font-size: 10px; line-height: 1.55; }
+.macro-dimension p b { display: block; margin-bottom: 3px; color: var(--text); }
+.macro-driver-section, .macro-strategy-section { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border); }
+.macro-driver-section > header, .macro-strategy-section > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.macro-driver-section h3, .macro-strategy-section h3 { margin: 0; font-size: 13px; }
+.macro-driver-section > header span, .macro-strategy-section > header span { color: var(--muted); font-size: 9px; }
+.macro-driver-section ul, .macro-strategy-section ul { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin: 10px 0 0; padding: 0; list-style: none; }
+.macro-driver-section li, .macro-strategy-item { min-width: 0; padding: 12px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.macro-driver-section li > span { display: block; color: var(--muted); font-size: 9px; }
+.macro-driver-section li > span b { color: var(--text); }
+.macro-driver-section li > em { display: inline-flex; margin-top: 8px; padding: 3px 5px; color: var(--market-accent); background: var(--market-soft); border-radius: 3px; font-size: 9px; font-style: normal; font-weight: 800; }
+.macro-driver-section li > p { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.macro-strategy-item > div { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.macro-strategy-item > div span { color: var(--muted); font-size: 9px; }
+.macro-strategy-item > div em { color: var(--market-accent); font-size: 9px; font-style: normal; font-weight: 800; }
+.macro-strategy-item > strong { display: block; margin-top: 10px; font-size: 11px; line-height: 1.45; }
+.macro-strategy-item > p { margin: 8px 0 0; color: var(--muted); font-size: 10px; line-height: 1.5; }
+.macro-strategy-item > small { display: block; margin-top: 10px; padding-top: 8px; color: var(--muted); border-top: 1px solid var(--border); font-size: 9px; line-height: 1.45; }
+.macro-strategy-item > small b { display: block; margin-bottom: 3px; color: var(--warning); }
+.macro-model-disclaimer { margin: 16px 0 0; color: var(--muted); font-size: 9px; line-height: 1.5; }
+.macro-raw-data-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 28px; padding-bottom: 12px; border-bottom: 1px solid var(--border); }
+.macro-raw-data-heading span { color: var(--muted); font-size: 9px; font-weight: 800; letter-spacing: .14em; }
+.macro-raw-data-heading h2 { margin: 4px 0 0; font-size: 17px; }
+.macro-raw-data-heading > p { max-width: 440px; margin: 0; color: var(--muted); font-size: 11px; line-height: 1.55; text-align: right; }
 .macro-market-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 16px; margin-top: 16px; }
 .macro-market-panel { --market-accent: var(--muted); --market-soft: var(--surface-raised); --market-border: var(--border); min-width: 0; overflow: hidden; border: 1px solid var(--market-border); border-top: 3px solid var(--market-accent); border-radius: var(--radius-md); }
 .macro-market-panel.china { --market-accent: var(--china-accent); --market-soft: var(--china-soft); --market-border: var(--china-border); }
@@ -443,6 +505,12 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .macro-separation-note > div:last-child { text-align: right; }
   .macro-separation-note > i { display: none; }
   .macro-separation-note > p { grid-column: 1 / -1; grid-row: 2; text-align: left; }
+  .macro-range-bar { grid-template-columns: 1fr auto; }
+  .macro-range-bar > p { grid-column: 1 / -1; text-align: left; }
+  .macro-range-control button { min-height: 44px; }
+  .macro-analysis-grid { grid-template-columns: 1fr; }
+  .macro-raw-data-heading { align-items: flex-start; flex-direction: column; gap: 8px; }
+  .macro-raw-data-heading > p { text-align: left; }
   .macro-market-grid { grid-template-columns: 1fr; }
   .macro-toolbar { width: 100%; justify-content: space-between; }
   .macro-toolbar .button, .macro-source-error .button { min-height: 44px; }
@@ -465,6 +533,13 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .analysis-actions .button { flex: 1; }
   .analysis-metrics { grid-template-columns: 1fr; }
   .macro-market-header { grid-template-columns: auto minmax(0, 1fr); }
+  .macro-range-bar { grid-template-columns: 1fr; }
+  .macro-range-control { width: 100%; }
+  .macro-range-control button { flex: 1; min-width: 0; }
+  .macro-analysis-heading { flex-direction: column; gap: 16px; }
+  .macro-conviction { width: 100%; justify-items: stretch; }
+  .macro-conviction > em { width: fit-content; }
+  .macro-dimension-grid, .macro-driver-section ul, .macro-strategy-section ul { grid-template-columns: 1fr; }
   .macro-market-header .data-status { grid-column: 1 / -1; width: fit-content; }
   .macro-current-value { align-items: flex-start; flex-direction: column; gap: 4px; }
   .macro-current-value > span { text-align: left; }

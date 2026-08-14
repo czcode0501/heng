@@ -22,7 +22,7 @@ EASTMONEY_URL = "https://datacenter-web.eastmoney.com/api/data/v1/get"
 BLS_URL = "https://api.bls.gov/publicAPI/v2/timeseries/data/"
 H15_URL = (
     "https://www.federalreserve.gov/datadownload/Output.aspx?"
-    "rel=H15&series=d7e27b7b09a3a7feae95b9c61781fcd8&lastobs=36&from=&to=&"
+    "rel=H15&series=d7e27b7b09a3a7feae95b9c61781fcd8&lastobs=60&from=&to=&"
     "filetype=csv&label=include&layout=seriescolumn&type=package"
 )
 _CACHE_LOCK = threading.Lock()
@@ -231,7 +231,7 @@ def _indicator(
 ) -> dict:
     if not points:
         raise ValueError(f"{name} 没有足够的有效数据")
-    chart_points = points[-24:]
+    chart_points = points[-60:]
     return {
         "id": indicator_id,
         "group": group,
@@ -245,6 +245,166 @@ def _indicator(
     }
 
 
+def _clamp(value: float, minimum: float = -100, maximum: float = 100) -> float:
+    return max(minimum, min(maximum, value))
+
+
+def _normalized_score(value: float, neutral: float, span: float, *, inverse: bool = False) -> float:
+    score = ((float(value) - neutral) / span) * 50
+    return _clamp(-score if inverse else score)
+
+
+def _score_state(score: float, dimension: str) -> str:
+    if dimension == "growth":
+        return "扩张" if score >= 25 else "走弱" if score <= -25 else "分化"
+    if dimension == "inflation":
+        return "偏高" if score >= 25 else "偏低" if score <= -25 else "温和"
+    return "偏宽松" if score >= 20 else "偏紧" if score <= -20 else "中性"
+
+
+def _display_indicator(indicator: dict) -> str:
+    value = float(indicator["summary"]["value"])
+    rendered = f"{value:.2f}".rstrip("0").rstrip(".")
+    return f"{rendered}{indicator.get('unit') or ''}"
+
+
+def _strategy_set(market_id: str, growth: float, inflation: float, liquidity: float) -> list[dict]:
+    defensive = growth <= -20 or liquidity <= -20
+    inflationary = inflation >= 20
+    if market_id == "china":
+        return [
+            {
+                "asset": "A股风格",
+                "stance": "防守优先" if defensive else "选择性进攻",
+                "title": "重视现金流与盈利确定性" if defensive else "优先结构性成长与政策敏感方向",
+                "rationale": "增长或流动性尚未形成全面共振。" if defensive else "修复存在但并不均衡，更适合自下而上筛选。",
+                "risk": "若PMI与工业生产同步走弱，应进一步降低周期暴露。",
+            },
+            {
+                "asset": "行业线索",
+                "stance": "关注上游定价" if inflationary else "均衡配置",
+                "title": "观察生产端价格向利润的传导" if inflationary else "等待价格与需求形成同向确认",
+                "rationale": "PPI与CPI的相对变化决定利润更偏向上游还是消费端。",
+                "risk": "价格信号若缺乏终端需求配合，可能只形成短期交易而非盈利周期。",
+            },
+            {
+                "asset": "仓位纪律",
+                "stance": "分批验证",
+                "title": "保留现金并等待增长确认",
+                "rationale": "模型处于宏观层，不替代个股估值、财务质量和交易止损。",
+                "risk": "单月数据修订或政策预期变化会导致阶段判断快速切换。",
+            },
+        ]
+    return [
+        {
+            "asset": "美股风格",
+            "stance": "质量防守" if defensive else "适度进取",
+            "title": "优先稳定现金流与定价能力" if defensive else "增长改善时提高风险资产权重",
+            "rationale": "金融条件偏紧时，高质量盈利通常比远期叙事更有承受力。" if defensive else "增长和金融条件允许更高的风险偏好。",
+            "risk": "就业快速恶化会把晚周期降温推向衰退交易。",
+        },
+        {
+            "asset": "久期与利率",
+            "stance": "控制长久期" if liquidity <= -20 else "中性久期",
+            "title": "高实际利率下避免过度依赖估值扩张" if liquidity <= -20 else "等待利率方向确认",
+            "rationale": "实际利率和政策利率共同决定长久期资产的折现压力。",
+            "risk": "通胀快速回落或政策转向会令利率敏感资产出现反向行情。",
+        },
+        {
+            "asset": "仓位纪律",
+            "stance": "保留对冲",
+            "title": "用数据确认替代单次押注",
+            "rationale": "核心通胀、非农与收益率曲线需要连续数据共同确认。",
+            "risk": "数据修订和市场提前交易预期可能使宏观信号滞后于价格。",
+        },
+    ]
+
+
+def analyze_macro_market(market: dict) -> dict:
+    indicators = {indicator["id"]: indicator for indicator in market.get("indicators", [])}
+    market_id = market.get("id")
+
+    def value(indicator_id: str) -> float:
+        return float(indicators[indicator_id]["summary"]["value"])
+
+    if market_id == "china":
+        growth = (_normalized_score(value("cn-pmi"), 50, 2) + _normalized_score(value("cn-industrial-yoy"), 4, 4)) / 2
+        inflation = (_normalized_score(value("cn-cpi-yoy"), 2, 2) + _normalized_score(value("cn-ppi-yoy"), 2, 4)) / 2
+        liquidity = (_normalized_score(value("cn-m1-yoy"), 5, 4) + _normalized_score(value("cn-m2-yoy"), 8, 4)) / 2
+        dimension_copy = {
+            "growth": f"制造业PMI {_display_indicator(indicators['cn-pmi'])}，工业增加值同比 {_display_indicator(indicators['cn-industrial-yoy'])}。",
+            "inflation": f"CPI同比 {_display_indicator(indicators['cn-cpi-yoy'])}，PPI同比 {_display_indicator(indicators['cn-ppi-yoy'])}。",
+            "liquidity": f"M1同比 {_display_indicator(indicators['cn-m1-yoy'])}，M2同比 {_display_indicator(indicators['cn-m2-yoy'])}。",
+        }
+        drivers = [
+            {"indicator": indicators["cn-pmi"]["name"], "value": _display_indicator(indicators["cn-pmi"]), "signal": "支撑" if value("cn-pmi") >= 50 else "拖累", "explanation": "50以上代表制造业扩张，以下代表收缩。"},
+            {"indicator": indicators["cn-ppi-cpi-gap"]["name"], "value": _display_indicator(indicators["cn-ppi-cpi-gap"]), "signal": "上游占优" if value("cn-ppi-cpi-gap") >= 0 else "消费端占优", "explanation": "正值表示生产端价格强于消费端。"},
+            {"indicator": indicators["cn-m2-yoy"]["name"], "value": _display_indicator(indicators["cn-m2-yoy"]), "signal": "流动性支撑" if value("cn-m2-yoy") >= 8 else "温和", "explanation": "货币扩张需要与实体需求共同验证。"},
+        ]
+    elif market_id == "united-states":
+        growth = (
+            _normalized_score(value("us-payroll-change"), 100, 200)
+            + _normalized_score(value("us-unemployment"), 4, 2, inverse=True)
+            + _normalized_score(value("us-curve-10y2y"), 0, 2)
+        ) / 3
+        inflation = (_normalized_score(value("us-cpi-yoy"), 2, 2) + _normalized_score(value("us-core-cpi-yoy"), 2, 2)) / 2
+        liquidity = (
+            _normalized_score(value("us-fed-funds"), 2.5, 2.5, inverse=True)
+            + _normalized_score(value("us-real-yield-10y"), 1, 2, inverse=True)
+        ) / 2
+        dimension_copy = {
+            "growth": f"非农月增量 {_display_indicator(indicators['us-payroll-change'])}，失业率 {_display_indicator(indicators['us-unemployment'])}。",
+            "inflation": f"CPI同比 {_display_indicator(indicators['us-cpi-yoy'])}，核心CPI同比 {_display_indicator(indicators['us-core-cpi-yoy'])}。",
+            "liquidity": f"联邦基金利率 {_display_indicator(indicators['us-fed-funds'])}，10年实际利率 {_display_indicator(indicators['us-real-yield-10y'])}。",
+        }
+        drivers = [
+            {"indicator": indicators["us-core-cpi-yoy"]["name"], "value": _display_indicator(indicators["us-core-cpi-yoy"]), "signal": "通胀约束" if value("us-core-cpi-yoy") > 2.5 else "通胀缓和", "explanation": "核心通胀决定政策转向的空间。"},
+            {"indicator": indicators["us-payroll-change"]["name"], "value": _display_indicator(indicators["us-payroll-change"]), "signal": "增长支撑" if value("us-payroll-change") > 0 else "增长拖累", "explanation": "就业增量转负意味着需求降温风险上升。"},
+            {"indicator": indicators["us-real-yield-10y"]["name"], "value": _display_indicator(indicators["us-real-yield-10y"]), "signal": "估值约束" if value("us-real-yield-10y") > 1 else "估值支撑", "explanation": "实际利率越高，长久期资产折现压力越大。"},
+        ]
+    else:
+        raise ValueError(f"不支持的宏观市场：{market_id}")
+
+    scores = {"growth": round(_clamp(growth)), "inflation": round(_clamp(inflation)), "liquidity": round(_clamp(liquidity))}
+    if scores["growth"] <= -30 and scores["inflation"] >= 20:
+        regime_code, regime = "stagflation-risk", "滞胀风险"
+    elif scores["growth"] <= -30:
+        regime_code, regime = "contraction-pressure", "衰退压力"
+    elif scores["growth"] >= 30 and scores["inflation"] >= 30:
+        regime_code, regime = "overheating", "过热阶段"
+    elif scores["growth"] >= 25 and scores["inflation"] < 30:
+        regime_code, regime = "expansion", "扩张阶段"
+    elif market_id == "united-states" and scores["inflation"] >= 20 and scores["liquidity"] <= -15:
+        regime_code, regime = "late-cycle-cooling", "晚周期降温"
+    elif scores["growth"] >= -15:
+        regime_code, regime = "uneven-recovery", "结构性修复"
+    else:
+        regime_code, regime = "policy-transition", "政策过渡期"
+
+    dimensions = [
+        {"id": "growth", "name": "增长动能", "score": scores["growth"], "state": _score_state(scores["growth"], "growth"), "explanation": dimension_copy["growth"]},
+        {"id": "inflation", "name": "通胀压力", "score": scores["inflation"], "state": _score_state(scores["inflation"], "inflation"), "explanation": dimension_copy["inflation"]},
+        {"id": "liquidity", "name": "流动性" if market_id == "china" else "金融条件", "score": scores["liquidity"], "state": _score_state(scores["liquidity"], "liquidity"), "explanation": dimension_copy["liquidity"]},
+    ]
+    confidence = round(_clamp(75 + sum(abs(item["score"]) for item in dimensions) / 15, 0, 95))
+    stance = "中性偏防守" if scores["growth"] <= -20 or scores["liquidity"] <= -20 else "偏进取" if scores["growth"] >= 25 and scores["liquidity"] >= -10 else "中性偏进取"
+    summary = f"模型将当前环境识别为“{regime}”：增长{_score_state(scores['growth'], 'growth')}，通胀{_score_state(scores['inflation'], 'inflation')}，{'流动性' if market_id == 'china' else '金融条件'}{_score_state(scores['liquidity'], 'liquidity')}。"
+    return {
+        "modelVersion": "macro-regime-v1",
+        "market": market_id,
+        "asOf": max(indicator["summary"]["date"] for indicator in indicators.values()),
+        "regimeCode": regime_code,
+        "regime": regime,
+        "stance": stance,
+        "confidence": confidence,
+        "summary": summary,
+        "dimensions": dimensions,
+        "drivers": drivers,
+        "strategies": _strategy_set(market_id, scores["growth"], scores["inflation"], scores["liquidity"]),
+        "disclaimer": "模型输出仅用于研究，不构成个股买卖或收益保证；请结合估值、基本面和风险承受能力独立决策。",
+    }
+
+
 def build_china_market(payloads: dict[str, dict]) -> dict:
     m1 = parse_eastmoney_series(payloads["money"], "CURRENCY_SAME")
     m2 = parse_eastmoney_series(payloads["money"], "BASIC_CURRENCY_SAME")
@@ -253,7 +413,7 @@ def build_china_market(payloads: dict[str, dict]) -> dict:
     cpi = parse_eastmoney_series(payloads["cpi"], "NATIONAL_SAME")
     ppi = parse_eastmoney_series(payloads["ppi"], "BASE_SAME")
     price_gap = align_difference(ppi, cpi)
-    return {
+    market = {
         "id": "china",
         "code": "CN",
         "title": "中国宏观环境",
@@ -268,6 +428,8 @@ def build_china_market(payloads: dict[str, dict]) -> dict:
             _indicator("cn-ppi-cpi-gap", "通胀与盈利", "PPI－CPI剪刀差", price_gap, unit="百分点", frequency="月度", source=CHINA_NBS_SOURCE, stage_type="price_gap"),
         ],
     }
+    market["analysis"] = analyze_macro_market(market)
+    return market
 
 
 def build_us_market(bls_payload: dict, h15_csv: str) -> dict:
@@ -280,7 +442,7 @@ def build_us_market(bls_payload: dict, h15_csv: str) -> dict:
     fed_funds = h15["RIFSPFF_N.M"]
     real_yield = h15["RIFLGFCY10_XII_N.M"]
     curve = align_difference(h15["RIFLGFCY10_N.M"], h15["RIFLGFCY02_N.M"])
-    return {
+    market = {
         "id": "united-states",
         "code": "US",
         "title": "美国宏观环境",
@@ -295,6 +457,8 @@ def build_us_market(bls_payload: dict, h15_csv: str) -> dict:
             _indicator("us-curve-10y2y", "金融条件", "10年－2年期限利差", curve, unit="百分点", frequency="月度均值", source=FED_SOURCE, stage_type="curve"),
         ],
     }
+    market["analysis"] = analyze_macro_market(market)
+    return market
 
 
 def _request(url: str, *, body: bytes | None = None, content_type: str | None = None) -> bytes:
@@ -350,7 +514,7 @@ def fetch_us_market() -> dict:
     current_year = datetime.now(timezone.utc).year
     bls_body = {
         "seriesid": ["CUUR0000SA0", "CUUR0000SA0L1E", "CES0000000001", "LNS14000000"],
-        "startyear": str(current_year - 3),
+        "startyear": str(current_year - 6),
         "endyear": str(current_year),
     }
     with ThreadPoolExecutor(max_workers=2) as executor:

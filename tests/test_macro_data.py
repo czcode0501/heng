@@ -2,6 +2,7 @@ import unittest
 
 from macro_data import (
     align_difference,
+    analyze_macro_market,
     build_china_market,
     build_us_market,
     parse_bls_payload,
@@ -119,7 +120,60 @@ class MacroDataContractTests(unittest.TestCase):
         self.assertEqual(china["indicators"][0]["source"]["name"], "东方财富数据中心")
         self.assertEqual(united_states["indicators"][0]["source"]["name"], "美国劳工统计局 BLS")
         self.assertTrue(all(indicator["points"] for indicator in china["indicators"] + united_states["indicators"]))
-        self.assertTrue(all(len(indicator["points"]) <= 24 for indicator in china["indicators"] + united_states["indicators"]))
+        self.assertTrue(all(len(indicator["points"]) <= 60 for indicator in china["indicators"] + united_states["indicators"]))
+        self.assertEqual(china["analysis"]["market"], "china")
+        self.assertEqual(united_states["analysis"]["market"], "united-states")
+        self.assertEqual(len(china["analysis"]["dimensions"]), 3)
+        self.assertTrue(china["analysis"]["strategies"])
+
+    def test_macro_analysis_explains_regime_scores_and_strategy_bias(self):
+        market = {
+            "id": "china",
+            "indicators": [
+                {"id": "cn-m1-yoy", "name": "M1同比", "unit": "%", "summary": {"value": 4.0, "date": "2026-07"}},
+                {"id": "cn-m2-yoy", "name": "M2同比", "unit": "%", "summary": {"value": 7.7, "date": "2026-07"}},
+                {"id": "cn-pmi", "name": "制造业PMI", "unit": "", "summary": {"value": 49.2, "date": "2026-07"}},
+                {"id": "cn-industrial-yoy", "name": "工业增加值同比", "unit": "%", "summary": {"value": 5.3, "date": "2026-06"}},
+                {"id": "cn-cpi-yoy", "name": "CPI同比", "unit": "%", "summary": {"value": 0.5, "date": "2026-07"}},
+                {"id": "cn-ppi-yoy", "name": "PPI同比", "unit": "%", "summary": {"value": 3.5, "date": "2026-07"}},
+                {"id": "cn-ppi-cpi-gap", "name": "PPI－CPI剪刀差", "unit": "百分点", "summary": {"value": 3.0, "date": "2026-07"}},
+            ],
+        }
+
+        analysis = analyze_macro_market(market)
+
+        self.assertEqual(analysis["regimeCode"], "uneven-recovery")
+        self.assertEqual(analysis["regime"], "结构性修复")
+        self.assertEqual(analysis["modelVersion"], "macro-regime-v1")
+        self.assertGreaterEqual(analysis["confidence"], 0)
+        self.assertLessEqual(analysis["confidence"], 100)
+        self.assertEqual({item["id"] for item in analysis["dimensions"]}, {"growth", "inflation", "liquidity"})
+        self.assertTrue(all(-100 <= item["score"] <= 100 for item in analysis["dimensions"]))
+        self.assertTrue(any(driver["indicator"] == "制造业PMI" for driver in analysis["drivers"]))
+        self.assertTrue(all(strategy["rationale"] and strategy["risk"] for strategy in analysis["strategies"]))
+
+    def test_restrictive_us_conditions_do_not_produce_an_aggressive_stance(self):
+        values = {
+            "us-core-cpi-yoy": ("核心CPI同比", 2.67, "%"),
+            "us-cpi-yoy": ("CPI同比", 3.52, "%"),
+            "us-fed-funds": ("联邦基金有效利率", 3.63, "%"),
+            "us-payroll-change": ("非农就业月增量", -23, "千人"),
+            "us-unemployment": ("失业率", 4.1, "%"),
+            "us-real-yield-10y": ("美国10年期实际利率", 2.35, "%"),
+            "us-curve-10y2y": ("10年－2年期限利差", 0.38, "百分点"),
+        }
+        market = {
+            "id": "united-states",
+            "indicators": [
+                {"id": indicator_id, "name": name, "unit": unit, "summary": {"value": value, "date": "2026-07"}}
+                for indicator_id, (name, value, unit) in values.items()
+            ],
+        }
+
+        analysis = analyze_macro_market(market)
+
+        self.assertEqual(analysis["regimeCode"], "late-cycle-cooling")
+        self.assertEqual(analysis["stance"], "中性偏防守")
 
 
 if __name__ == "__main__":

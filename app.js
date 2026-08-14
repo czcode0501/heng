@@ -57,6 +57,8 @@ let searchRequestId = 0;
 let analysisRequestId = 0;
 let macroRequestId = 0;
 let macroRefreshTimer;
+let macroTimeRange = 24;
+let latestMacroPayload = null;
 let activeAnalysisResult = null;
 
 const elements = {
@@ -278,7 +280,8 @@ async function loadMacroWorkspaceData(force = false) {
     if (requestId !== macroRequestId || route.directory !== "macro") return;
     if (!response.ok) throw new Error(payload?.error?.message || "宏观数据读取失败");
     if (!Array.isArray(payload?.data?.markets)) throw new Error("宏观数据返回格式不正确");
-    elements.signalDetail.innerHTML = renderMacroWorkspace(payload.data);
+    latestMacroPayload = payload.data;
+    elements.signalDetail.innerHTML = renderMacroWorkspace(payload.data, { range: macroTimeRange });
     window.clearTimeout(macroRefreshTimer);
     const refreshDelay = Math.max(60, Number(payload.data.refreshAfterSeconds) || 21600) * 1000;
     macroRefreshTimer = window.setTimeout(() => {
@@ -593,6 +596,13 @@ document.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("click", (event) => {
+  const rangeButton = event.target.closest("[data-macro-range]");
+  if (rangeButton && latestMacroPayload) {
+    macroTimeRange = Number(rangeButton.dataset.macroRange) || 24;
+    elements.signalDetail.innerHTML = renderMacroWorkspace(latestMacroPayload, { range: macroTimeRange });
+    elements.signalDetail.querySelector(`[data-macro-range="${macroTimeRange}"]`)?.focus();
+    return;
+  }
   if (event.target.closest("[data-refresh-macro]")) {
     loadMacroWorkspaceData(true);
     return;
