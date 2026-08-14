@@ -30,7 +30,7 @@ function sector(id, title, rank) {
     action: { id: rank === 1 ? "increase" : "hold", label: rank === 1 ? "增配" : "持有" },
     targetWeight: rank === 1 ? 24 : 0,
     returns: { "5d": 1.2, "20d": 6.8, "60d": 9.3, "120d": 13.1 },
-    dimensions: { relativeMomentum: 88, trendQuality: 84, breadth: 72, participation: 66, riskEfficiency: 79, macroFit: 50 },
+    dimensions: { relativeMomentum: 88, trendQuality: 84, breadth: 72, capitalFlow: 66, riskEfficiency: 79, macroFit: 50 },
     history: history(),
     dataQuality: { status: "live", observations: 140, issues: [] },
   };
@@ -80,7 +80,7 @@ test("sector rotation renders independent China and US workspaces with ranking a
   assert.match(html, /相对动量/);
   assert.match(html, /趋势质量/);
   assert.match(html, /市场宽度/);
-  assert.match(html, /成交参与/);
+  assert.match(html, /资金确认/);
   assert.match(html, /风险效率/);
   assert.match(html, /宏观适配/);
   assert.match(html, /data-sector-select="information-technology"/);

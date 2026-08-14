@@ -6,10 +6,10 @@ const RANGE_OPTIONS = [
 ];
 
 const DIMENSIONS = [
-  { id: "relativeMomentum", label: "相对动量", weight: 35, note: "相对基准的 5/20/60/120 日表现" },
+  { id: "relativeMomentum", label: "相对动量", weight: 30, note: "相对基准的 5/20/60/120 日表现" },
   { id: "trendQuality", label: "趋势质量", weight: 25, note: "均线排列、斜率与价格位置" },
   { id: "breadth", label: "市场宽度", weight: 15, note: "上涨参与面与趋势一致性代理" },
-  { id: "participation", label: "成交参与", weight: 10, note: "量能是否支持当前方向" },
+  { id: "capitalFlow", label: "资金确认", weight: 15, note: "去重后的价格位置、方向与量能确认" },
   { id: "riskEfficiency", label: "风险效率", weight: 10, note: "收益、波动与回撤的性价比" },
   { id: "macroFit", label: "宏观适配", weight: 5, note: "首版为中性占位，后续连接宏观信号" },
 ];
@@ -80,7 +80,7 @@ function chartGeometry(points, width = 520, height = 132) {
 function renderHeader(status, checkedAt) {
   return `<a class="back-link" href="#signals">← 返回模型信号目录</a>
     <header class="signal-detail-header sector-detail-header">
-      <div><p class="eyebrow">SECTOR ROTATION</p><h2>板块轮动</h2><p>中国股票与美国股票独立排名。模型把相对强弱、趋势、参与度和风险压缩成可追溯的轮动阶段、操作建议与目标权重。</p></div>
+      <div><p class="eyebrow">SECTOR ROTATION</p><h2>板块轮动</h2><p>中国股票与美国股票独立排名。模型把相对强弱、趋势、资金确认和风险压缩成可追溯的轮动阶段、操作建议与目标权重。</p></div>
       <div class="sector-header-actions"><span class="quality-status ${status === "数据通过" ? "passed" : ""}">${escapeHtml(status)}</span><button class="button secondary" type="button" data-refresh-sector-rotation>刷新数据</button><small>${escapeHtml(checkedAt)}</small></div>
     </header>`;
 }

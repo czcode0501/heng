@@ -69,6 +69,15 @@ class CapitalFlowModelTests(unittest.TestCase):
         self.assertNotIn("estimatedNetFlow", snapshot["components"])
         self.assertGreater(len(snapshot["history"]), 100)
 
+    def test_provider_turnover_is_preferred_to_price_times_volume_for_absolute_flow(self):
+        points = make_flow_series()
+        for point in points:
+            point["amount"] = point["volume"] * 10
+
+        metrics = compute_capital_flow_metrics(points)
+
+        self.assertLess(metrics["estimatedNetFlow"]["1d"], points[-1]["volume"] * 11)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -41,7 +41,7 @@ def make_rotation_dashboard():
         "generatedAt": "2026-08-14T12:00:00+00:00",
         "refreshAfterSeconds": 1800,
         "autoRefresh": True,
-        "methodologyVersion": "1.1.0",
+        "methodologyVersion": "1.1.1",
         "markets": markets,
         "dataQuality": {"status": "live", "liveMarkets": 2, "totalMarkets": 2},
     }

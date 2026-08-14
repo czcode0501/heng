@@ -18,6 +18,13 @@ import {
   renderSectorRotationWorkspaceError,
   renderSectorRotationWorkspaceLoading,
 } from "./signals/sector-rotation/view.js";
+import {
+  getCapitalFlowChartPoint,
+  getCapitalFlowRefreshDelay,
+  renderCapitalFlowWorkspace,
+  renderCapitalFlowWorkspaceError,
+  renderCapitalFlowWorkspaceLoading,
+} from "./signals/capital-flow/view.js";
 
 const stockCatalog = [
   { symbol: "600519", yahoo: "600519.SS", name: "贵州茅台", market: "A股 · 上海", currency: "CNY", price: 1341.99, change: -0.98 },
@@ -87,6 +94,12 @@ let latestSectorRotationPayload = null;
 let sectorRotationRange = "3m";
 let sectorRotationForceOnNextRender = false;
 const activeSectorRotationSectors = { china: null, "united-states": null };
+let capitalFlowRequestId = 0;
+let capitalFlowRefreshTimer;
+let latestCapitalFlowPayload = null;
+let capitalFlowPeriod = "20d";
+let capitalFlowForceOnNextRender = false;
+const activeCapitalFlowSectors = { china: null, "united-states": null };
 let activeAnalysisResult = null;
 
 function marketTimingRequestPath(force = false) {
@@ -300,6 +313,16 @@ function renderSignalDetail(directory) {
     return;
   }
 
+  if (directory.id === "capital-flow") {
+    elements.signalDetail.innerHTML = latestCapitalFlowPayload
+      ? renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors })
+      : renderCapitalFlowWorkspaceLoading();
+    const force = capitalFlowForceOnNextRender;
+    capitalFlowForceOnNextRender = false;
+    loadCapitalFlowWorkspaceData(force);
+    return;
+  }
+
   elements.signalDetail.innerHTML = `<a class="back-link" href="#signals">← 返回模型信号目录</a>
     <header class="signal-detail-header">
       <div><p class="eyebrow">${directory.english}</p><h2>${escapeHtml(directory.title)}</h2><p>${escapeHtml(directory.description)}</p></div>
@@ -405,6 +428,36 @@ async function loadSectorRotationWorkspaceData(force = false) {
   }
 }
 
+async function loadCapitalFlowWorkspaceData(force = false) {
+  const requestId = ++capitalFlowRequestId;
+  const refreshButton = elements.signalDetail.querySelector("[data-refresh-capital-flow]");
+  if (refreshButton) {
+    refreshButton.disabled = true;
+    refreshButton.textContent = force ? "正在刷新…" : "正在检查…";
+  }
+  try {
+    const response = await fetch(`/api/capital-flow${force ? "?refresh=1" : ""}`);
+    const payload = await response.json();
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== capitalFlowRequestId || route.directory !== "capital-flow") return;
+    if (!response.ok) throw new Error(payload?.error?.message || "资金流数据读取失败");
+    if (!Array.isArray(payload?.data?.markets)) throw new Error("资金流数据返回格式不正确");
+    latestCapitalFlowPayload = payload.data;
+    for (const market of payload.data.markets) {
+      if (!activeCapitalFlowSectors[market.id] && market.sectors?.length) activeCapitalFlowSectors[market.id] = market.sectors[0].id;
+    }
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(payload.data, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
+    window.clearTimeout(capitalFlowRefreshTimer);
+    capitalFlowRefreshTimer = window.setTimeout(() => {
+      if (resolveWorkspaceRoute(window.location.hash).directory === "capital-flow") loadCapitalFlowWorkspaceData();
+    }, getCapitalFlowRefreshDelay(payload.data));
+  } catch (error) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (requestId !== capitalFlowRequestId || route.directory !== "capital-flow") return;
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspaceError(error.message || "免费数据源暂时不可用，请稍后重试");
+  }
+}
+
 function setPrimaryNavigation(workspace) {
   const isOverview = workspace === "overview";
   elements.navOverview.classList.toggle("active", isOverview);
@@ -426,6 +479,7 @@ function renderWorkspaceRoute() {
   renderSignalDirectoryStructure(directory?.id || null);
   if (directory?.id !== "market-timing") window.clearTimeout(marketTimingRefreshTimer);
   if (directory?.id !== "sector-rotation") window.clearTimeout(sectorRotationRefreshTimer);
+  if (directory?.id !== "capital-flow") window.clearTimeout(capitalFlowRefreshTimer);
 
   if (isOverview) {
     const portfolio = portfolios.find((item) => item.id === activePortfolioId);
@@ -833,7 +887,54 @@ function hideSectorRotationChartPoint(chart) {
   if (tooltip) tooltip.hidden = true;
 }
 
+function showCapitalFlowChartPoint(chart, ratio) {
+  const points = marketTimingChartPoints(chart);
+  const point = getCapitalFlowChartPoint(points, ratio);
+  if (!point) return;
+  const shell = chart.closest(".capital-chart-shell");
+  const tooltip = shell?.querySelector(".capital-chart-tooltip");
+  const cursor = chart.querySelector(".capital-chart-cursor");
+  const dot = chart.querySelector(".capital-chart-dot");
+  if (!shell || !tooltip || !cursor || !dot) return;
+  const values = points.map(({ value }) => Number(value)).filter(Number.isFinite);
+  const minimum = Math.min(...values);
+  const maximum = Math.max(...values);
+  const span = maximum - minimum || 1;
+  const x = points.length > 1 ? point.index / (points.length - 1) * 500 : 250;
+  const y = 128 - (point.value - minimum) / span * 128;
+  const percent = x / 500 * 100;
+  cursor.setAttribute("x1", x.toFixed(2));
+  cursor.setAttribute("x2", x.toFixed(2));
+  dot.setAttribute("cx", x.toFixed(2));
+  dot.setAttribute("cy", y.toFixed(2));
+  tooltip.querySelector("strong").textContent = point.date;
+  tooltip.querySelector("span").textContent = `方向压力 ${point.value.toFixed(2)}`;
+  tooltip.querySelector("em").textContent = point.value >= 60 ? "流入占优" : point.value <= 40 ? "流出占优" : "中性区间";
+  tooltip.hidden = false;
+  tooltip.classList.toggle("is-flipped", percent > 64);
+  shell.style.setProperty("--tooltip-x", `${percent}%`);
+  shell.classList.add("is-active");
+  chart.dataset.activeIndex = String(point.index);
+}
+
+function hideCapitalFlowChartPoint(chart) {
+  const shell = chart.closest(".capital-chart-shell");
+  shell?.classList.remove("is-active");
+  const tooltip = shell?.querySelector(".capital-chart-tooltip");
+  if (tooltip) tooltip.hidden = true;
+}
+
 document.addEventListener("click", (event) => {
+  const capitalFlowNavigation = event.target.closest('a[href="#signals/capital-flow"]');
+  if (capitalFlowNavigation) {
+    const route = resolveWorkspaceRoute(window.location.hash);
+    if (route.directory === "capital-flow") {
+      event.preventDefault();
+      loadCapitalFlowWorkspaceData(true);
+      return;
+    }
+    capitalFlowForceOnNextRender = true;
+  }
   const sectorRotationNavigation = event.target.closest('a[href="#signals/sector-rotation"]');
   if (sectorRotationNavigation) {
     const route = resolveWorkspaceRoute(window.location.hash);
@@ -842,7 +943,7 @@ document.addEventListener("click", (event) => {
       loadSectorRotationWorkspaceData(true);
       return;
     }
-    sectorRotationForceOnNextRender = true;
+    sectorRotationForceOnNextRender = !sectorRotationNavigation.hasAttribute("data-reuse-sector-cache");
   }
   const marketTimingNavigation = event.target.closest('a[href="#signals/market-timing"]');
   if (marketTimingNavigation) {
@@ -878,6 +979,24 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.closest("[data-refresh-sector-rotation]")) {
     loadSectorRotationWorkspaceData(true);
+    return;
+  }
+  const capitalPeriodButton = event.target.closest("[data-capital-period]");
+  if (capitalPeriodButton && latestCapitalFlowPayload) {
+    capitalFlowPeriod = capitalPeriodButton.dataset.capitalPeriod || "20d";
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
+    elements.signalDetail.querySelector(`[data-capital-period="${capitalFlowPeriod}"]`)?.focus();
+    return;
+  }
+  const capitalSelectButton = event.target.closest("[data-capital-select][data-capital-market]");
+  if (capitalSelectButton && latestCapitalFlowPayload) {
+    activeCapitalFlowSectors[capitalSelectButton.dataset.capitalMarket] = capitalSelectButton.dataset.capitalSelect;
+    elements.signalDetail.innerHTML = renderCapitalFlowWorkspace(latestCapitalFlowPayload, { period: capitalFlowPeriod, activeSectors: activeCapitalFlowSectors });
+    elements.signalDetail.querySelector(`.capital-market-workspace.${capitalSelectButton.dataset.capitalMarket} .capital-evidence`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    return;
+  }
+  if (event.target.closest("[data-refresh-capital-flow]")) {
+    loadCapitalFlowWorkspaceData(true);
     return;
   }
   const rangeButton = event.target.closest("[data-macro-range]");
@@ -920,6 +1039,12 @@ document.addEventListener("pointermove", (event) => {
   const bounds = chart.getBoundingClientRect();
   showSectorRotationChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
 });
+document.addEventListener("pointermove", (event) => {
+  const chart = event.target.closest?.("[data-capital-flow-chart]");
+  if (!chart) return;
+  const bounds = chart.getBoundingClientRect();
+  showCapitalFlowChartPoint(chart, (event.clientX - bounds.left) / bounds.width);
+});
 document.addEventListener("pointerout", (event) => {
   const chart = event.target.closest?.("[data-market-timing-chart]");
   if (!chart || chart.contains(event.relatedTarget)) return;
@@ -935,6 +1060,11 @@ document.addEventListener("pointerout", (event) => {
   if (!chart || chart.contains(event.relatedTarget)) return;
   hideSectorRotationChartPoint(chart);
 });
+document.addEventListener("pointerout", (event) => {
+  const chart = event.target.closest?.("[data-capital-flow-chart]");
+  if (!chart || chart.contains(event.relatedTarget)) return;
+  hideCapitalFlowChartPoint(chart);
+});
 document.addEventListener("focusin", (event) => {
   if (event.target.matches?.("[data-market-timing-chart]")) showMarketTimingChartPoint(event.target, 1);
 });
@@ -944,6 +1074,9 @@ document.addEventListener("focusin", (event) => {
 document.addEventListener("focusin", (event) => {
   if (event.target.matches?.("[data-sector-chart]")) showSectorRotationChartPoint(event.target, 1);
 });
+document.addEventListener("focusin", (event) => {
+  if (event.target.matches?.("[data-capital-flow-chart]")) showCapitalFlowChartPoint(event.target, 1);
+});
 document.addEventListener("focusout", (event) => {
   if (event.target.matches?.("[data-market-timing-chart]")) hideMarketTimingChartPoint(event.target);
 });
@@ -952,6 +1085,9 @@ document.addEventListener("focusout", (event) => {
 });
 document.addEventListener("focusout", (event) => {
   if (event.target.matches?.("[data-sector-chart]")) hideSectorRotationChartPoint(event.target);
+});
+document.addEventListener("focusout", (event) => {
+  if (event.target.matches?.("[data-capital-flow-chart]")) hideCapitalFlowChartPoint(event.target);
 });
 document.addEventListener("keydown", (event) => {
   const chart = event.target.matches?.("[data-market-timing-chart]") ? event.target : null;
@@ -982,6 +1118,16 @@ document.addEventListener("keydown", (event) => {
   const current = Number(chart.dataset.activeIndex || points.length - 1);
   const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
   showSectorRotationChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
+});
+document.addEventListener("keydown", (event) => {
+  const chart = event.target.matches?.("[data-capital-flow-chart]") ? event.target : null;
+  if (!chart || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+  event.preventDefault();
+  const points = marketTimingChartPoints(chart);
+  if (!points.length) return;
+  const current = Number(chart.dataset.activeIndex || points.length - 1);
+  const index = event.key === "Home" ? 0 : event.key === "End" ? points.length - 1 : Math.max(0, Math.min(points.length - 1, current + (event.key === "ArrowLeft" ? -1 : 1)));
+  showCapitalFlowChartPoint(chart, points.length > 1 ? index / (points.length - 1) : 0);
 });
 window.addEventListener("hashchange", renderWorkspaceRoute);
 

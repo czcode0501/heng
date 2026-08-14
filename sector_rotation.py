@@ -54,6 +54,7 @@ def _validated_series(points: Iterable[dict], name: str, minimum: int = 60) -> l
                     "low": min(float(point.get("low") or close), close),
                     "close": close,
                     "volume": max(0.0, float(point.get("volume") or 0)),
+                    "amount": max(0.0, float(point.get("amount") or 0)),
                 }
             )
         except (KeyError, TypeError, ValueError):

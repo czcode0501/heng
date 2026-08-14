@@ -222,7 +222,7 @@ def _read_cache(path: Path) -> dict | None:
 
 def _fresh_cache(path: Path) -> dict | None:
     payload = _read_cache(path)
-    if not payload or payload.get("methodologyVersion") != "1.1.0":
+    if not payload or payload.get("methodologyVersion") != "1.1.1":
         return None
     try:
         generated_at = datetime.fromisoformat(str(payload["generatedAt"]).replace("Z", "+00:00"))
@@ -317,7 +317,7 @@ def get_sector_rotation_dashboard(
             "generatedAt": datetime.now(timezone.utc).isoformat(),
             "refreshAfterSeconds": CACHE_TTL_SECONDS if live_count else ERROR_CACHE_TTL_SECONDS,
             "autoRefresh": True,
-            "methodologyVersion": "1.1.0",
+            "methodologyVersion": "1.1.1",
             "profile": "balanced",
             "markets": markets,
             "dataQuality": {

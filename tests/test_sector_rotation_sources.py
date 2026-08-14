@@ -66,7 +66,7 @@ class SectorRotationSourceTests(unittest.TestCase):
 
         self.assertEqual([market["id"] for market in dashboard["markets"]], ["china", "united-states"])
         self.assertTrue(dashboard["autoRefresh"])
-        self.assertEqual(dashboard["methodologyVersion"], "1.1.0")
+        self.assertEqual(dashboard["methodologyVersion"], "1.1.1")
         self.assertEqual(dashboard["dataQuality"]["liveMarkets"], 2)
 
     def test_dashboard_uses_last_successful_cache_when_sources_fail(self):

@@ -62,6 +62,7 @@ def _validated_points(points: Iterable[dict]) -> list[dict]:
                     "low": low,
                     "close": close,
                     "volume": volume,
+                    "amount": max(0.0, float(point.get("amount") or 0)),
                 }
             )
         except (KeyError, TypeError, ValueError):
@@ -95,7 +96,10 @@ def _cmf(points: list[dict], period: int) -> float | None:
 
 def _estimated_flow(points: list[dict], period: int) -> tuple[float | None, float | None]:
     selected = points[-period:]
-    dollar_volume = [point["volume"] * (point["high"] + point["low"] + point["close"]) / 3 for point in selected]
+    dollar_volume = [
+        point["amount"] or point["volume"] * (point["high"] + point["low"] + point["close"]) / 3
+        for point in selected
+    ]
     total = sum(dollar_volume)
     if not total:
         return None, None

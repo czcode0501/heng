@@ -18,7 +18,7 @@ export const signalDirectories = [
     index: "03",
     title: "板块轮动",
     english: "SECTOR ROTATION",
-    description: "行业与板块轮动信号的独立分析模块。具体分类、排序与切换规则等待定义。",
+    description: "中国与美国市场独立排名，把趋势、相对强弱、资金确认与风险转化为轮动阶段。",
   },
   {
     id: "investor-sentiment",
@@ -32,7 +32,7 @@ export const signalDirectories = [
     index: "05",
     title: "资金流向",
     english: "CAPITAL FLOW",
-    description: "资金流向信号的独立分析模块。具体市场范围、口径与周期等待定义。",
+    description: "用九项价格—成交量证据观察中美板块的流入、流出、持续性与价量背离。",
   },
 ];
 
