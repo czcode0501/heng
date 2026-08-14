@@ -14,6 +14,7 @@ from urllib.parse import parse_qs, urlparse
 from macro_data import get_macro_dashboard
 from market_timing import apply_market_timing_range
 from market_timing_sources import get_market_timing_dashboard
+from sector_rotation_sources import get_sector_rotation_dashboard
 
 
 SEARCH_LIMIT = 10
@@ -314,6 +315,11 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 data = apply_market_timing_range(
                     get_market_timing_dashboard(force=force), range_id, custom_start
                 )
+                self.send_json(200, {"data": data})
+                return
+            if parsed.path == "/api/sector-rotation":
+                force = params.get("refresh", ["0"])[0] == "1"
+                data = get_sector_rotation_dashboard(force=force)
                 self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/health":
