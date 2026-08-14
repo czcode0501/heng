@@ -2,6 +2,8 @@ import unittest
 
 from macro_data import (
     align_difference,
+    build_china_market,
+    build_us_market,
     parse_bls_payload,
     parse_eastmoney_series,
     parse_h15_csv,
@@ -12,6 +14,14 @@ from macro_data import (
 
 
 class MacroDataContractTests(unittest.TestCase):
+    @staticmethod
+    def eastmoney_payload(field, values):
+        rows = [
+            {"REPORT_DATE": f"{2024 + index // 12}-{index % 12 + 1:02d}-01 00:00:00", field: value}
+            for index, value in enumerate(values)
+        ]
+        return {"success": True, "result": {"data": list(reversed(rows))}}
+
     def test_eastmoney_series_is_normalized_oldest_to_newest(self):
         payload = {
             "success": True,
@@ -73,6 +83,36 @@ class MacroDataContractTests(unittest.TestCase):
         self.assertEqual(summary["observations"], 4)
         self.assertGreaterEqual(summary["percentile"], 0)
         self.assertLessEqual(summary["percentile"], 100)
+
+    def test_market_builders_emit_source_backed_chart_contracts(self):
+        china_payloads = {
+            "money": self.eastmoney_payload("CURRENCY_SAME", [4 + index / 10 for index in range(15)]),
+            "pmi": self.eastmoney_payload("MAKE_INDEX", [49 + (index % 4) / 2 for index in range(15)]),
+            "industrial": self.eastmoney_payload("BASE_SAME", [4 + index / 10 for index in range(15)]),
+            "cpi": self.eastmoney_payload("NATIONAL_SAME", [0.2 + index / 20 for index in range(15)]),
+            "ppi": self.eastmoney_payload("BASE_SAME", [-1 + index / 5 for index in range(15)]),
+        }
+        for row, value in zip(china_payloads["money"]["result"]["data"], reversed([6 + index / 10 for index in range(15)])):
+            row["BASIC_CURRENCY_SAME"] = value
+
+        bls_rows = []
+        for series_id, base in (("CUSR0000SA0", 300), ("CUSR0000SA0L1E", 310), ("CES0000000001", 157000), ("LNS14000000", 4)):
+            data = []
+            for index in range(15):
+                data.append({"year": str(2024 + index // 12), "period": f"M{index % 12 + 1:02d}", "value": str(base + index)})
+            bls_rows.append({"seriesID": series_id, "data": list(reversed(data))})
+        bls_payload = {"status": "REQUEST_SUCCEEDED", "Results": {"series": bls_rows}}
+        h15_csv = """\"Time Period\",\"RIFSPFF_N.M\",\"RIFLGFCY02_N.M\",\"RIFLGFCY10_N.M\",\"RIFLGFCY10_XII_N.M\"\n2025-01,4.5,4.1,4.4,2.0\n2025-02,4.4,4.0,4.5,2.1\n"""
+
+        china = build_china_market(china_payloads)
+        united_states = build_us_market(bls_payload, h15_csv)
+
+        self.assertEqual(len(china["indicators"]), 7)
+        self.assertEqual(len(united_states["indicators"]), 7)
+        self.assertEqual(china["indicators"][0]["source"]["name"], "东方财富数据中心")
+        self.assertEqual(united_states["indicators"][0]["source"]["name"], "美国劳工统计局 BLS")
+        self.assertTrue(all(indicator["points"] for indicator in china["indicators"] + united_states["indicators"]))
+        self.assertTrue(all(len(indicator["points"]) <= 24 for indicator in china["indicators"] + united_states["indicators"]))
 
 
 if __name__ == "__main__":

@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
+from macro_data import get_macro_dashboard
+
 
 SEARCH_LIMIT = 10
 BAOSTOCK_LOCK = threading.Lock()
@@ -281,6 +283,11 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/analysis":
                 data = get_stock_analysis(params.get("symbol", [""])[0])
+                self.send_json(200, {"data": data})
+                return
+            if parsed.path == "/api/macro":
+                force = params.get("refresh", ["0"])[0] == "1"
+                data = get_macro_dashboard(force=force)
                 self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/health":
