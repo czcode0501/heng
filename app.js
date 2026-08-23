@@ -58,7 +58,7 @@ import {
   renderStockAnalysisMarkup,
   renderStockDecisionDynamicMarkup,
 } from "./signals/stock-analysis/view.js";
-import { buildCompanyManagerInsight, companyResearchRefreshDelay } from "./signals/stock-analysis/company-research.js";
+import { buildCompanyManagerInsight, buildCompanyMethodComparison, companyResearchRefreshDelay } from "./signals/stock-analysis/company-research.js";
 import { renderCompanyAnalysisShell } from "./signals/stock-analysis/company-research-view.js";
 import {
   buildStockDecision,
@@ -97,6 +97,7 @@ import {
   renderAnalysisProfileStrip,
 } from "./portfolio-analysis-profile.js";
 import { preferBrokerQuote } from "./broker-quote-priority.js";
+import { buildManagerOpportunityModel, renderManagerFirstStep, renderManagerOpportunities } from "./market-opportunities.js";
 
 const BROKER_PORTFOLIO_ID = "broker-real";
 
@@ -185,6 +186,8 @@ let brokerAutoRefreshTimer;
 let brokerSnapshotRequest;
 let brokerAutoSelected = Boolean(cachedIbkrSnapshot);
 let lastBrokerConnectionError = "";
+let latestScannerPayload = null;
+let scannerResultsRequested = false;
 if (cachedIbkrSnapshot) activePortfolioId = BROKER_PORTFOLIO_ID;
 let pendingPositionStock = null;
 let signalTimeRange = "1m";
@@ -263,6 +266,8 @@ function microMarketRequestPath(force = false) {
 const elements = {
   portfolioList: document.querySelector("#portfolio-list"),
   portfolioManagerPanel: document.querySelector("#portfolio-manager-panel"),
+  managerFirstPanel: document.querySelector("#manager-first-panel"),
+  marketOpportunityPanel: document.querySelector("#market-opportunity-panel"),
   todayActionPanel: document.querySelector("#today-action-panel"),
   managerHoldingsReview: document.querySelector("#manager-holdings-review"),
   portfolioTitle: document.querySelector("#portfolio-title"),
@@ -626,6 +631,8 @@ function renderActivePortfolio() {
   elements.brokerPositionsPanel.hidden = true;
   const portfolio = activeCustomPortfolio();
   if (!portfolio) return;
+  elements.managerFirstPanel.innerHTML = renderManagerFirstStep(portfolio.managerId);
+  renderMarketOpportunities(portfolio);
   queuePortfolioCompanyResearch(portfolio);
   const managerInsight = buildManagerPortfolioInsight({
     managerId: portfolio.managerId,
@@ -645,7 +652,8 @@ function renderActivePortfolio() {
     targetReturn: portfolio.targetReturn,
     riskCapacity: portfolio.riskCapacity,
   });
-  elements.portfolioTitle.textContent = portfolio.name;
+  elements.portfolioTitle.textContent = "投资方法与市场机会";
+  elements.pageContextCurrent.textContent = "经理选择与市场扫描";
   const snapshot = portfolioSnapshot(portfolio);
   const investedValue = snapshot.investedValue;
   const totalCost = snapshot.totalCost;
@@ -717,6 +725,28 @@ function renderActivePortfolio() {
   elements.holdingsEmpty.hidden = portfolio.positions.length > 0;
   elements.customHoldingsTableWrap.hidden = portfolio.positions.length === 0;
   renderAllocation(portfolio, investedValue, totalValue);
+}
+
+function renderMarketOpportunities(portfolio = activeCustomPortfolio()) {
+  if (!portfolio || !elements.marketOpportunityPanel) return;
+  const model = buildManagerOpportunityModel(latestScannerPayload, portfolio.managerId);
+  const state = latestScannerPayload?.status === "loading" || (!scannerResultsRequested && latestScannerPayload == null) ? "loading" : latestScannerPayload?.status === "ready" ? "ready" : "unavailable";
+  elements.marketOpportunityPanel.innerHTML = renderManagerOpportunities(model, state);
+}
+
+async function loadScannerResults() {
+  if (scannerResultsRequested) return;
+  scannerResultsRequested = true;
+  latestScannerPayload = { status: "loading", rows: [] };
+  renderMarketOpportunities();
+  try {
+    const response = await fetch("/api/scanner-results", { headers: { Accept: "application/json" } });
+    const payload = await response.json();
+    latestScannerPayload = response.ok ? payload.data : { status: "unavailable", rows: [] };
+  } catch {
+    latestScannerPayload = { status: "unavailable", rows: [] };
+  }
+  renderMarketOpportunities();
 }
 
 function renderBrokerAccountOverview() {
@@ -1703,6 +1733,9 @@ function renderStockAnalysis(payload) {
     ? buildCompanyManagerInsight(activeCompanyResearch, decisionContext.managerId)
     : null;
   decisionContext.companyResearchInsight = managerInsight;
+  decisionContext.companyMethodComparison = activeCompanyResearch
+    ? buildCompanyMethodComparison(activeCompanyResearch, decisionContext.managerId)
+    : null;
   const decision = buildStockDecision(effectivePayload, {
     ...decisionContext,
     holdingPeriod: analysisTimeRange,
@@ -1987,7 +2020,38 @@ elements.portfolioManagerPanel.addEventListener("change", (event) => {
   persistPortfolioState();
   if (activeAnalysisPayload && elements.analysisDialog.open) renderStockAnalysis(activeAnalysisPayload);
   renderActivePortfolio();
-  showToast(`已由 ${resolvePortfolioManager(portfolio.managerId).name} 接管 ${portfolio.name}`);
+  showToast(`已切换为${resolvePortfolioManager(portfolio.managerId).methodName}方法`);
+});
+
+elements.managerFirstPanel.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-manager-first-choice]");
+  if (!button) return;
+  const portfolio = activeCustomPortfolio();
+  if (!portfolio) return;
+  Object.assign(portfolio, assignPortfolioManager(portfolio, button.dataset.managerFirstChoice));
+  persistPortfolioState();
+  renderActivePortfolio();
+  showToast(`已选择${resolvePortfolioManager(portfolio.managerId).methodName}；市场候选已按该方法重排`);
+});
+
+elements.marketOpportunityPanel.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-opportunity-symbol]");
+  if (!button) return;
+  const providerSymbol = button.dataset.opportunitySymbol;
+  openStockAnalysis({ symbol: providerSymbol.replace(/\.(SS|SZ|BJ)$/i, ""), yahoo: providerSymbol, name: button.dataset.opportunityName, market: button.dataset.opportunityMarket === "CN" ? "A股 · 扫描候选" : "美股 · 扫描候选", currency: button.dataset.opportunityMarket === "CN" ? "CNY" : "USD" });
+});
+
+elements.portfolioManagerPanel.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-method-recommendation]");
+  if (!button) return;
+  const portfolio = activeCustomPortfolio();
+  if (!portfolio) return;
+  Object.assign(portfolio, assignPortfolioManager(portfolio, button.dataset.methodRecommendation));
+  persistPortfolioState();
+  if (activeAnalysisPayload && elements.analysisDialog.open) renderStockAnalysis(activeAnalysisPayload);
+  renderActivePortfolio();
+  const method = resolvePortfolioManager(portfolio.managerId);
+  showToast(`已按你的回答切换为${method.methodName}；这不是适当性建议`);
 });
 
 elements.portfolioManagerPanel.addEventListener("input", (event) => {
@@ -2882,3 +2946,4 @@ refreshPortfolioQuotes().catch(() => null);
 signalPreloader.load().then((payload) => hydrateSignalWorkspaces(payload.workspaces)).catch(() => {
   // Direct workspace loaders retain their individual endpoint fallback.
 });
+loadScannerResults();

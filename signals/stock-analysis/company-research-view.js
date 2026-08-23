@@ -63,6 +63,7 @@ function fundamentalsMarkup(research) {
   if (!periods.length) {
     return `<div class="company-research-empty"><strong>财务事实待补证</strong><p>${escapeHtml(fundamentals?.reason || "当前没有可验证的结构化财报，系统不会填入中性分或推测值。")}</p></div>`;
   }
+  const latest = periods[0];
   const rows = periods.map((period) => `<tr>
     <th scope="row">${escapeHtml(period.periodEnd || "期间待确认")}<small>${escapeHtml(period.form || "财报")} · 申报 ${escapeHtml(period.filedAt || "待确认")}</small></th>
     <td>${formatNumber(period.revenue, period.currency)}</td>
@@ -73,12 +74,26 @@ function fundamentalsMarkup(research) {
   </tr>`).join("");
   const source = fundamentals.source || {};
   const sourceUrl = safeExternalUrl(source.url);
-  return `<div class="table-wrap company-fundamentals-table"><table>
+  const latestFiledAt = Date.parse(latest?.filedAt || latest?.periodEnd || "");
+  const observedAt = Date.parse(research?.meta?.fetchedAt || "") || Date.now();
+  const ageDays = Number.isFinite(latestFiledAt) ? Math.max(0, (observedAt - latestFiledAt) / 86_400_000) : null;
+  const recentlyChanged = ageDays != null && ageDays <= 120;
+  const cadenceLabel = recentlyChanged ? "最近有变化" : "几个月没有变化";
+  const cadenceDetail = recentlyChanged
+    ? `最新报告期 ${latest.periodEnd || "待确认"}，申报于 ${latest.filedAt || "待确认"}；优先复核增长与风险变化。`
+    : `最近可核验报告仍是 ${latest.periodEnd || "待确认"}；没有新披露时不重复铺满整张表。`;
+  return `<section class="company-change-state ${recentlyChanged ? "is-recent" : "is-quiet"}" aria-label="财报变化状态">
+    <span>${cadenceLabel}</span><strong>${escapeHtml(cadenceDetail)}</strong><small>财报属于季度/事件触发数据，不代表实时经营状态。</small>
+  </section>
+  ${growthMarkup(periods)}
+  <details class="company-fundamentals-details">
+    <summary><span><strong>完整季度财报与指标表</strong><small>${periods.length} 个报告期 · 原始数据最后查看</small></span><em>展开</em></summary>
+    <div class="table-wrap company-fundamentals-table"><table>
     <thead><tr><th scope="col">报告期</th><th scope="col">营收</th><th scope="col">净利润</th><th scope="col">自由现金流</th><th scope="col">资产</th><th scope="col">负债</th></tr></thead>
     <tbody>${rows}</tbody>
-  </table></div>
-  ${growthMarkup(periods)}
-  <p class="company-source-note">结构化事实来源：${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.label || "查看来源")}</a>` : escapeHtml(source.label || "来源待补证")}。当前仅展示已返回字段，空值不会被推算。</p>`;
+    </table></div>
+    <p class="company-source-note">结构化事实来源：${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(source.label || "查看来源")}</a>` : escapeHtml(source.label || "来源待补证")}。当前仅展示已返回字段，空值不会被推算。</p>
+  </details>`;
 }
 
 function newsMarkup(research) {
@@ -139,7 +154,7 @@ function managerDossierMarkup(dossier) {
       const sourceLabel = item?.source?.label || "来源待标记";
       return `<li><span>${escapeHtml(item.text)}</span><small>${sourceUrl ? `<a href="${escapeHtml(sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(sourceLabel)}</a>` : escapeHtml(sourceLabel)}</small></li>`;
     }).join("");
-    return `<details class="company-dossier-card" data-status="${escapeHtml(section.status)}"${section.priority <= 3 ? " open" : ""}>
+    return `<details class="company-dossier-card" data-status="${escapeHtml(section.status)}">
       <summary><span><b>${section.priority}</b>${escapeHtml(section.label)}</span><em>${escapeHtml(labels[section.status] || section.status)}</em></summary>
       ${facts ? `<ul>${facts}</ul>` : `<p>${escapeHtml(section.missingReason)}</p>`}
     </details>`;
@@ -151,7 +166,24 @@ function managerDossierMarkup(dossier) {
   </section>`;
 }
 
-function managerMarkup(insight) {
+function methodCard(item) {
+  return `<article class="method-compare-card${item.selected ? " is-current" : ""}">
+    <header><div><span>${item.selected ? "当前方法" : "差异最大反方"}</span><h4>${escapeHtml(item.methodName)}</h4></div><em>${escapeHtml(item.conclusion)}</em></header>
+    <p class="method-source-boundary">${escapeHtml(item.sourceLabel)} · 公开方法论映射 · 非本人观点 · 非授权 · 非真实持仓 · 非收益承诺</p>
+    <dl><div><dt>最看重</dt><dd>${escapeHtml(item.focus)}</dd></div><div><dt>最大仓位</dt><dd>${escapeHtml(item.maxPosition)}</dd></div><div><dt>最担心</dt><dd>${escapeHtml(item.worry)}</dd></div><div><dt>改判条件</dt><dd>${escapeHtml(item.changeCondition)}</dd></div></dl>
+    <footer><strong>行动：${escapeHtml(item.action)}</strong><span>等待：${escapeHtml(item.waitingCondition)}</span><small>退出：${escapeHtml(item.exitDiscipline)} · 复核：${escapeHtml(item.reviewCadence)}</small></footer>
+  </article>`;
+}
+
+function methodComparisonMarkup(research, insight) {
+  if (!research || !insight) return "";
+  const comparison = buildCompanyMethodComparison(research, insight.manager.id);
+  const compact = [comparison.current, comparison.counter].map(methodCard).join("");
+  const full = comparison.all.map((item) => `<li><strong>${escapeHtml(item.methodName)}</strong><span>${escapeHtml(item.conclusion)} · ${escapeHtml(item.maxPosition)}</span><small>${escapeHtml(item.sourceLabel)}</small></li>`).join("");
+  return `<section class="method-comparison" aria-labelledby="method-comparison-title"><header><div><span>SAME FACTS · DIFFERENT METHODS</span><h3 id="method-comparison-title">同一只股票，两种方法为什么会做不同决定</h3></div><small>默认展示当前方法与量化差异最大的反方方法</small></header><div class="method-comparison-grid">${compact}</div><details><summary>展开查看全部八种方法</summary><ul>${full}</ul></details></section>`;
+}
+
+function managerMarkup(insight, research) {
   if (!insight) return `<div class="company-research-empty"><strong>经理解读正在等待公司事实</strong><p>事实载入前不生成方法论结论。</p></div>`;
   const evidenceLabels = { A: "A级 · 已核验", B: "B级 · 待双源核验", C: insight.evidence.status === "conflict" ? "冲突 · 决策阻断" : "C级 · 事实不足" };
   const factValue = (value, { signed = false } = {}) => {
@@ -162,10 +194,11 @@ function managerMarkup(insight) {
   const facts = insight.facts || {};
   const narrative = insight.narrative || {};
   return `<div class="company-manager-interpretation">
-    <header><div><span>同一事实，不同经理镜头</span><h3>${escapeHtml(insight.manager.name)} · ${escapeHtml(insight.verdict)}</h3></div><div class="company-manager-badges"><em>研究分 ${Number.isFinite(Number(insight.score)) ? Number(insight.score).toFixed(1) : "—"}</em><small>方法论模拟口吻 · 非本人原话</small></div></header>
+    ${methodComparisonMarkup(research, insight)}
+    <header><div><span>当前投资方法详解</span><h3>${escapeHtml(insight.manager.methodName)} · ${escapeHtml(insight.verdict)}</h3><small>${escapeHtml(insight.manager.sourceLabel)}</small></div><div class="company-manager-badges"><em>研究分 ${Number.isFinite(Number(insight.score)) ? Number(insight.score).toFixed(1) : "—"}</em><small>方法论模拟口吻 · 非本人原话</small></div></header>
     <ul aria-label="经理公司研究重点">${insight.focus.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>
     <section class="company-manager-voice" aria-labelledby="company-manager-reading-title">
-      <h4 id="company-manager-reading-title">站在这位经理的方法论里，我会这样读</h4>
+      <h4 id="company-manager-reading-title">站在这种投资方法里，如何读同一组事实</h4>
       <p>${escapeHtml(narrative.opening || insight.methodology)}</p>
       <p>${escapeHtml(narrative.factRead || "公司事实仍不足以形成具体解读。")}</p>
       <p>${escapeHtml(narrative.businessRead || "产品、护城河、市场地位、管理层、未来预期、估值、催化与风险仍需逐项核验。")}</p>
@@ -184,7 +217,7 @@ function managerMarkup(insight) {
       <article><h4>什么会让我改判</h4><p>${escapeHtml(narrative.changeMind || insight.challenge)}</p></article>
     </section>
     <p class="company-evidence-boundary">${escapeHtml(narrative.evidenceBoundary || "证据边界待确认。")}</p>
-    <p class="company-fact-boundary"><strong>事实数据不会因基金经理切换而改变。</strong>切换的是对同一组事实的关注顺序、解释方法、决策门槛与退出条件。</p>
+    <p class="company-fact-boundary"><strong>事实数据不会因基金经理切换而改变。</strong>切换的是投资方法的关注顺序、证据门槛、行动、首笔仓位、等待条件与退出纪律。以上均为公开方法论映射，非本人观点、非授权、非真实持仓、非收益承诺。</p>
   </div>`;
 }
 
@@ -207,7 +240,8 @@ export function renderCompanyAnalysisShell({ marketMarkup, research = null, insi
     <section id="company-panel-market" role="tabpanel" aria-labelledby="company-tab-market"${selected === "market" ? "" : " hidden"}>${marketMarkup || ""}</section>
     <section id="company-panel-fundamentals" role="tabpanel" aria-labelledby="company-tab-fundamentals"${selected === "fundamentals" ? "" : " hidden"}>${fundamentalsMarkup(research)}</section>
     <section id="company-panel-news" role="tabpanel" aria-labelledby="company-tab-news"${selected === "news" ? "" : " hidden"}>${newsMarkup(research)}</section>
-    <section id="company-panel-manager" role="tabpanel" aria-labelledby="company-tab-manager"${selected === "manager" ? "" : " hidden"}>${managerMarkup(insight)}</section>
+    <section id="company-panel-manager" role="tabpanel" aria-labelledby="company-tab-manager"${selected === "manager" ? "" : " hidden"}>${managerMarkup(insight, research)}</section>
     ${providerMarkup(research)}
   </section>`;
 }
+import { buildCompanyMethodComparison } from "./company-research.js";

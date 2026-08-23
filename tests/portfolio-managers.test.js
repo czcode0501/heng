@@ -228,7 +228,7 @@ test("a company data conflict above one percent blocks an otherwise executable b
 test("portfolio manager panel and stock analysis expose the active methodology accessibly", () => {
   const panel = renderPortfolioManagerPanel("marks", { portfolioName: "稳健组合" });
   assert.match(panel, /<details class="manager-workbench-details">/);
-  assert.match(panel, /<summary[^>]*>.*查看完整方法论/s);
+  assert.match(panel, /<summary[^>]*>.*查看完整方法/s);
   assert.match(panel, /data-portfolio-manager-select/);
   assert.match(panel, /aria-describedby="portfolio-manager-method"/);
   assert.match(panel, /霍华德·马克斯/);
@@ -239,38 +239,22 @@ test("portfolio manager panel and stock analysis expose the active methodology a
     holdingPeriod: "3m",
     context: { ...liveContext, managerId: "marks" },
   });
-  assert.match(analysis, /基金经理方法论/);
+  assert.match(analysis, /投资方法/);
   assert.match(analysis, /霍华德·马克斯/);
   assert.match(analysis, /数据覆盖/);
-  assert.match(analysis, /方法论镜头，不代表本人观点/);
+  assert.match(analysis, /公开方法论映射.*非本人观点.*非授权.*非真实持仓.*非收益承诺/);
 });
 
-test("manager panel renders each available named avatar for the matching manager", () => {
-  const buffettPanel = renderPortfolioManagerPanel("buffett");
-  const mungerPanel = renderPortfolioManagerPanel("munger");
-  const grahamPanel = renderPortfolioManagerPanel("graham");
-  const lynchPanel = renderPortfolioManagerPanel("lynch");
-  const marksPanel = renderPortfolioManagerPanel("marks");
-  const dalioPanel = renderPortfolioManagerPanel("dalio");
-
-  assert.match(buffettPanel, /<img class="manager-avatar"[^>]*warren-buffett-avatar\.png[^>]*alt="沃伦·巴菲特头像"/);
-  assert.doesNotMatch(buffettPanel, />WB<\/span>/);
-  assert.match(mungerPanel, /<img class="manager-avatar"[^>]*charlie-munger-avatar\.png[^>]*alt="查理·芒格头像"/);
-  assert.doesNotMatch(mungerPanel, />CM<\/span>/);
-  assert.match(grahamPanel, /<img class="manager-avatar"[^>]*benjamin-graham-avatar\.png[^>]*alt="本杰明·格雷厄姆头像"/);
-  assert.doesNotMatch(grahamPanel, />BG<\/span>/);
-  assert.match(lynchPanel, /<img class="manager-avatar"[^>]*peter-lynch-avatar\.png[^>]*alt="彼得·林奇头像"/);
-  assert.doesNotMatch(lynchPanel, />PL<\/span>/);
-  assert.match(marksPanel, /<img class="manager-avatar"[^>]*howard-marks-avatar\.png[^>]*alt="霍华德·马克斯头像"/);
-  assert.doesNotMatch(marksPanel, />HM<\/span>/);
-  assert.match(dalioPanel, /<span class="manager-avatar" aria-hidden="true">RD<\/span>/);
-});
-
-test("manager avatars use a clearer 48px presentation without image layout shift", () => {
+test("manager identity is primary while method remains a clear explanation", () => {
   const panel = renderPortfolioManagerPanel("buffett");
-
-  assert.match(panel, /<img class="manager-avatar" width="48" height="48"/);
-  assert.match(styles, /\.manager-avatar\s*\{[^}]*width:\s*48px;[^}]*height:\s*48px;/s);
+  assert.match(panel, /当前投资经理/);
+  assert.ok(panel.indexOf("沃伦·巴菲特") < panel.indexOf("质量价值"));
+  assert.match(panel, /质量价值/);
+  assert.match(panel, /warren-buffett-avatar/);
+  assert.match(panel, /alt="沃伦·巴菲特头像"/);
+  assert.match(panel, /切换投资经理/);
+  assert.match(panel, /第一次选择/);
+  assert.match(panel, /不是适当性建议/);
 });
 
 test("dashboard wires the manager panel to portfolio state and responsive styling", () => {

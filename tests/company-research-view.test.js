@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import {
   buildCompanyManagerInsight,
+  buildCompanyMethodComparison,
   companyResearchRefreshDelay,
 } from "../signals/stock-analysis/company-research.js";
 import { renderCompanyAnalysisShell } from "../signals/stock-analysis/company-research-view.js";
@@ -192,6 +193,21 @@ test("manager tab speaks with the selected methodology and hides internal workfl
   assert.doesNotMatch(markup, /双源规则/);
   assert.doesNotMatch(markup, />ready<|>waiting<|>pending</);
   assert.doesNotMatch(markup, /五步投资评判流程/);
+});
+
+test("company method comparison defaults to current and most different counter method", () => {
+  const comparison = buildCompanyMethodComparison(research, "buffett");
+  assert.equal(comparison.all.length, 8);
+  assert.equal(comparison.current.methodName, "质量价值");
+  assert.notEqual(comparison.current.managerId, comparison.counter.managerId);
+  assert.equal(comparison.current.conclusion, "此方法无法形成结论");
+  assert.equal(comparison.current.maxPosition, "0%（仅研究）");
+
+  const markup = renderCompanyAnalysisShell({ marketMarkup: "MARKET", research, insight: buildCompanyManagerInsight(research, "buffett"), activeTab: "manager" });
+  assert.match(markup, /同一只股票，两种方法为什么会做不同决定/);
+  assert.match(markup, /差异最大反方/);
+  assert.match(markup, /展开查看全部八种方法/);
+  assert.match(markup, /非本人观点 · 非授权 · 非真实持仓 · 非收益承诺/);
 });
 
 test("news tab distinguishes official filings from optional media news", () => {

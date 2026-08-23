@@ -35,7 +35,7 @@ export function renderPortfolioManagerPanel(managerId, options = {}) {
     preferences,
   );
   const optionsMarkup = PORTFOLIO_MANAGERS.map((candidate) => (
-    `<option value="${escapeHtml(candidate.id)}"${candidate.id === manager.id ? " selected" : ""}>${escapeHtml(candidate.name)} · ${escapeHtml(candidate.school)}</option>`
+    `<option value="${escapeHtml(candidate.id)}"${candidate.id === manager.id ? " selected" : ""}>${escapeHtml(candidate.name)} · ${escapeHtml(candidate.methodName)}</option>`
   )).join("");
   const focus = manager.focus.map((item) => `<li>${escapeHtml(item)}</li>`).join("");
   const renderSectors = (marketId) => insight?.preferredSectors?.[marketId]?.map((sector) => (
@@ -59,27 +59,37 @@ export function renderPortfolioManagerPanel(managerId, options = {}) {
       <div class="manager-identity">
         ${renderManagerAvatar(manager)}
         <div>
-          <span>当前基金经理 · ${escapeHtml(options.portfolioName || "当前组合")}</span>
+          <span>当前投资经理 · ${escapeHtml(options.portfolioName || "当前组合")}</span>
           <strong>${escapeHtml(manager.name)}</strong>
-          <small>${escapeHtml(manager.nameEn)} · ${escapeHtml(manager.school)} · ${escapeHtml(manager.horizon)}</small>
+          <small>${escapeHtml(manager.methodName)} · ${escapeHtml(manager.horizon)}</small>
         </div>
       </div>
-      <p class="manager-signature">${escapeHtml(insight?.signature || manager.mandate)}</p>
+      <div class="method-fit"><strong>为什么可能适合你的目标与风险</strong><p>${escapeHtml(manager.fit)}</p><small>这是研究偏好匹配，不是适当性建议。</small></div>
       <div class="manager-preference-controls" aria-label="组合分析偏好">
         <label for="manager-target-return"><span>目标年化回报</span><output for="manager-target-return" data-manager-target-return-output>${preferences.targetReturn}%</output><input id="manager-target-return" data-manager-target-return type="range" min="0" max="100" step="1" value="${preferences.targetReturn}" style="--manager-range:${preferences.targetReturn}%"${options.disabled ? " disabled" : ""}></label>
         <label for="manager-risk-capacity"><span>风险承担能力</span><output for="manager-risk-capacity" data-manager-risk-capacity-output>${preferences.riskCapacity}</output><input id="manager-risk-capacity" data-manager-risk-capacity type="range" min="0" max="100" step="1" value="${preferences.riskCapacity}" style="--manager-range:${preferences.riskCapacity}%"${options.disabled ? " disabled" : ""}></label>
       </div>
       <label class="manager-select-field" for="portfolio-manager-select">
-        <span>切换基金经理</span>
+        <span>切换投资经理</span>
         <select id="portfolio-manager-select" data-portfolio-manager-select aria-describedby="portfolio-manager-method"${options.disabled ? " disabled" : ""}>${optionsMarkup}</select>
       </label>
     </div>
+    <section class="method-onboarding" aria-labelledby="method-onboarding-title">
+      <div><span>第一次选择？</span><strong id="method-onboarding-title">遇到市场下跌，你更自然的反应是什么？</strong><small>用生活化偏好缩小研究方法范围；不判断你是否适合买卖任何证券。</small></div>
+      <div class="method-onboarding-options">
+        <button type="button" data-method-recommendation="marks">先少犯错，等风险回报更划算</button>
+        <button type="button" data-method-recommendation="buffett">重看生意，价格越低越想深入研究</button>
+        <button type="button" data-method-recommendation="lynch">检查成长故事有没有被数字证伪</button>
+        <button type="button" data-method-recommendation="soros">承认趋势变了，先缩仓再复盘</button>
+      </div>
+    </section>
+    <p class="method-standing-boundary"><strong>${escapeHtml(manager.methodName)}</strong> · ${escapeHtml(manager.sourceLabel)} · 公开方法论映射 · 非本人观点 · 非授权 · 非真实持仓 · 非收益承诺</p>
     <details class="manager-workbench-details">
-      <summary><span>专业研究层</span><strong>查看完整方法论、行业偏好与观察池</strong><small>公开方法论约束，不代表人物本人观点</small></summary>
+      <summary><span>专业研究层</span><strong>查看完整方法、行业偏好与观察池</strong><small>人物仅作为公开方法论来源</small></summary>
       <div class="manager-difference-grid">
       <section aria-labelledby="manager-style-heading">
         <span class="manager-section-kicker">INVESTMENT DNA</span>
-        <h3 id="manager-style-heading">${escapeHtml(manager.school)}怎么投</h3>
+        <h3 id="manager-style-heading">${escapeHtml(manager.methodName)}怎么投</h3>
         <p class="manager-method" id="portfolio-manager-method">${escapeHtml(manager.mandate)}</p>
         <ul class="manager-focus" aria-label="经理核心关注点">${focus}</ul>
         <details class="manager-contract-details">

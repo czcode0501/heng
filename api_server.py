@@ -8,6 +8,7 @@ import re
 import statistics
 import threading
 import time
+from pathlib import Path
 from datetime import date, datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -38,6 +39,7 @@ from time_ranges import validate_signal_range
 
 
 SEARCH_LIMIT = 10
+SCANNER_RESULT_PATH = Path(__file__).resolve().parent / "output" / "scanner" / "decisions-latest.json"
 BAOSTOCK_LOCK = threading.Lock()
 STOCK_ANALYSIS_CACHE_TTL_SECONDS = 5 * 60
 STOCK_ANALYSIS_CACHE_MAX_ENTRIES = 150
@@ -678,6 +680,15 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 return
             if parsed.path == "/api/data-sources":
                 self.send_json(200, {"data": get_data_source_center()})
+                return
+            if parsed.path == "/api/scanner-results":
+                if not SCANNER_RESULT_PATH.is_file():
+                    self.send_json(200, {"data": {"status": "unavailable", "reason": "尚未生成全市场扫描结果", "rows": []}})
+                    return
+                payload = json.loads(SCANNER_RESULT_PATH.read_text(encoding="utf-8"))
+                if payload.get("schemaVersion") != 1 or not isinstance(payload.get("rows"), list):
+                    raise ValueError("全市场扫描结果格式不正确")
+                self.send_json(200, {"data": {**payload, "status": "ready"}})
                 return
             if parsed.path == "/api/health":
                 self.send_json(

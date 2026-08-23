@@ -184,14 +184,14 @@ function renderMarket(market, options) {
           </dl>
         </div>
         <dl class="timing-regime-facts">
-          <div><dt>模型风险暴露</dt><dd>${escapeHtml(market.regime.exposureBand)}</dd></div>
+          <div><dt>最多投入风险资产</dt><dd>${escapeHtml(market.regime.exposureBand)}</dd></div>
           <div><dt>信心等级</dt><dd>${escapeHtml(market.regime.confidence)}</dd></div>
           <div><dt>有效观察值</dt><dd>${escapeHtml(comparison?.observations || 0)} 个交易日</dd></div>
         </dl>
       </section>
-      <p class="timing-regime-explanation">${escapeHtml(market.regime.summary)}</p>
+      <p class="timing-regime-explanation">${escapeHtml(market.regime.summary)} 当前最多考虑把 ${escapeHtml(market.regime.exposureBand)} 的资金放在股票等风险资产，其余保留现金；若信心不足，取区间下限。</p>
       <section aria-labelledby="timing-${escapeHtml(market.id)}-dimensions">
-        <header class="timing-dimensions-heading"><div><span>SIGNAL STACK</span><h4 id="timing-${escapeHtml(market.id)}-dimensions">五维择时证据</h4></div><strong>五维证据随所选区间重新计算 · 总权重 100%</strong></header>
+        <header class="timing-dimensions-heading"><div><span>判断依据</span><h4 id="timing-${escapeHtml(market.id)}-dimensions">五项市场证据</h4></div><strong>五项证据随所选区间重新计算 · 总权重 100%</strong></header>
         <div class="timing-dimension-grid">${market.dimensions.map(renderDimension).join("")}</div>
       </section>
       <footer class="timing-market-source"><span>数据源：${escapeHtml(market.source?.name || "--")}${escapeHtml(sourceSuffix)}</span><span>${escapeHtml(market.source?.access || "无需 API Key")} · 自动更新</span></footer>
@@ -202,7 +202,7 @@ function renderMarket(market, options) {
 function workspaceHeader(statusText, statusClass = "") {
   return `<a class="back-link" href="#signals">← 返回模型信号目录</a>
     <header class="signal-detail-header timing-detail-header">
-      <div><p class="eyebrow">MARKET TIMING</p><h2>市场择时</h2><p>中国股票与美国股票独立评分。模型整合趋势、广度、流动性、波动与风险偏好，输出可解释的市场阶段和风险暴露区间。</p></div>
+      <div><p class="eyebrow">市场环境</p><h2>市场择时</h2><p>分别判断中国和美国股市目前适合投入多少资金。结果综合上涨范围、成交是否顺畅、波动压力和风险偏好；它是仓位上限，不是必须买满。</p></div>
       <div class="timing-header-actions"><span class="quality-status ${escapeHtml(statusClass)}">${escapeHtml(statusText)}</span></div>
     </header>`;
 }

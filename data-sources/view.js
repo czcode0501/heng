@@ -93,11 +93,11 @@ function configurationForm(sourceId, status) {
     return `<div class="data-connector-copy"><h4>免费延迟模式检查</h4><p>无需账户、API Key 或行情订阅。检查按钮只确认公开数据服务是否正常，不会把延迟行情标记为实时行情。</p></div>${message}<button class="button primary" type="button" data-check-source="free">检查免费数据</button>`;
   }
   if (sourceId === "ibkr") {
-    return `<div class="data-connector-copy"><h4>IBKR · TWS / IB Gateway</h4><p>先在本机客户端启用 Socket API。网页只提交回环地址、端口和 Client ID；不接收 IBKR 用户名或密码。</p><p><a class="text-link" href="https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/" target="_blank" rel="noopener noreferrer">安装官方 TWS API Python 客户端 →</a></p></div>${message}
+    return `<div class="data-connector-copy"><h4>IBKR · TWS / IB Gateway</h4><p>先在本机客户端启用只读接口。网页只提交本机地址、端口和连接编号（Client ID）；不接收 IBKR 用户名或密码。</p><p><a class="text-link" href="https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/" target="_blank" rel="noopener noreferrer">安装官方 TWS API Python 客户端 →</a></p></div>${message}
       <form class="data-connector-form" data-broker-form="ibkr" data-source-form="ibkr">
         <label>本机地址<input name="host" value="127.0.0.1" readonly></label>
         <label>Socket 端口<input name="port" type="number" min="1" max="65535" value="7497" required><small>纸面账户通常为7497；实盘TWS通常为7496，以客户端设置为准。</small></label>
-        <label>Client ID<input name="clientId" type="number" min="0" max="999999" value="18" required></label>
+        <label>连接编号（Client ID）<input name="clientId" type="number" min="0" max="999999" value="18" required aria-describedby="ibkr-client-id-help"><small id="ibkr-client-id-help">用于区分同一台电脑上的多个接口连接；如果没有冲突，保留默认值 18。</small></label>
         <label>指定账户（可选）<input name="accountId" autocomplete="off" placeholder="多账户时填写，例如 U1234567"><small>留空时只接受单一账户；检测到多个账户会要求你指定。</small></label>
         <button class="button primary" type="submit">同步只读持仓</button>
       </form>`;
@@ -160,7 +160,7 @@ export function renderDataSourceCenter({ preferences, statuses = {}, selectedSou
   const status = statusFor(selected, statuses);
   const serviceStatus = statuses.service || { state: "pending", message: "等待本地数据服务健康检查。" };
   return `<header class="workspace-intro data-source-intro">
-    <div><p class="eyebrow">DATA SOURCE CENTER</p><h2>数据源中心</h2><p>行情默认继续使用免费延迟数据；IBKR与QMT只开放账户持仓读取，不开放任何下单能力。</p></div>
+    <div><p class="eyebrow">数据与账户连接</p><h2>数据源中心</h2><p>行情默认继续使用免费延迟数据；IBKR与QMT只读取账户持仓，不会下单。</p></div>
     <span class="structure-status">当前阶段：免费延迟数据 + 券商只读持仓</span>
   </header>
   <section class="data-service-health" aria-label="数据服务持续健康状态">
@@ -171,7 +171,7 @@ export function renderDataSourceCenter({ preferences, statuses = {}, selectedSou
   <section class="data-current-contract" aria-label="当前免费数据说明">
     <article><span>中国 A 股</span><strong>公开历史与延迟行情</strong><small>以交易日数据为主，延迟或收盘后更新</small></article>
     <article><span>美国股票</span><strong>公开延迟行情</strong><small>不承诺交易所全市场实时覆盖</small></article>
-    <article><span>订单流 / VRVP</span><strong>OHLCV 估算</strong><small>用于结构分析，不冒充真实逐笔或挂单墙</small></article>
+    <article><span>成交方向与密集区</span><strong>日常行情估算（OHLCV）</strong><small>只用于观察价格结构，不是真实逐笔成交或挂单墙</small></article>
   </section>
   ${renderNewsCredentialCenter(newsCredentials)}
   <section class="data-source-overview" aria-labelledby="data-source-overview-title">

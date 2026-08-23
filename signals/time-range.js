@@ -73,7 +73,7 @@ export function renderSignalTimeRangeControl({ range = "1m", customStart = "", s
   const selected = normalizeSignalTimeRange(range);
   const latestAllowed = maximum || new Date().toISOString().slice(0, 10);
   return `<section class="signal-time-range" data-signal-scope="${escapeHtml(scope)}" aria-label="统一时间范围">
-    <div><span>PERFORMANCE WINDOW</span><strong>选择对比时间</strong><small>从所选起点的首个有效观察值与最新数据比较。</small></div>
+    <div><span>对比时间</span><strong>选择对比时间</strong><small>从所选起点的首个有效观察值与最新数据比较。</small></div>
     <div class="signal-time-range-actions"><div class="signal-time-range-presets" role="group" aria-label="选择时间范围">
       ${SIGNAL_TIME_RANGES.filter(({ id }) => id !== "custom").map(({ id, label }) => `<button type="button" data-signal-range="${id}" data-signal-scope="${escapeHtml(scope)}" aria-pressed="${selected === id}">${label}</button>`).join("")}
     </div><label><span>自定义起点</span><input type="date" ${minimum ? `min="${escapeHtml(minimum)}"` : ""} max="${escapeHtml(latestAllowed)}" value="${escapeHtml(customStart)}" data-signal-custom-start data-signal-scope="${escapeHtml(scope)}"></label></div>

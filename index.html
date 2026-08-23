@@ -22,10 +22,10 @@
 
         <nav class="workspace-nav" aria-label="主要导航">
           <button class="nav-link nav-disclosure active" id="nav-overview" type="button" aria-controls="overview-subnav" aria-expanded="true" aria-current="page">
-            <span aria-hidden="true">▦</span><span class="nav-disclosure-label">总览</span><span class="nav-chevron" aria-hidden="true">⌄</span>
+            <span aria-hidden="true">▦</span><span class="nav-disclosure-label">研究首页</span><span class="nav-chevron" aria-hidden="true">⌄</span>
           </button>
           <div class="nav-disclosure-panel overview-subnav is-expanded" id="overview-subnav" aria-label="总览目录" aria-hidden="false">
-            <a class="overview-subnav-link active" href="#overview" aria-current="page"><span aria-hidden="true">01</span>我的组合</a>
+            <a class="overview-subnav-link active" href="#overview" aria-current="page"><span aria-hidden="true">01</span>经理与机会</a>
             <section class="portfolio-nav" aria-labelledby="portfolio-heading">
               <div class="section-heading-row">
                 <h2 id="portfolio-heading">我的组合</h2>
@@ -77,9 +77,14 @@
         </header>
 
         <div class="workspace-view" id="overview-workspace">
+        <section class="panel manager-first-panel" id="manager-first-panel" aria-label="选择投资方法"></section>
+        <section class="panel market-opportunity-panel" id="market-opportunity-panel" aria-label="当前市场研究候选" aria-live="polite"></section>
         <section class="panel today-action-panel" id="today-action-panel" aria-label="今日交易工作台" aria-live="polite">
           <p class="today-action-loading">正在汇总组合、市场与券商状态…</p>
         </section>
+        <details class="overview-professional-mode">
+          <summary><span><strong>专业模式</strong><small>持仓、完整指标、经理方法论与宏观证据</small></span><em>展开完整信息</em></summary>
+          <div class="overview-professional-content">
         <section class="panel broker-positions-panel" id="broker-positions-panel" hidden aria-labelledby="broker-positions-title">
           <div class="panel-header broker-panel-header">
             <div>
@@ -192,6 +197,8 @@
           </div>
           <div class="overview-signal-links" id="overview-signal-links"></div>
         </section>
+          </div>
+        </details>
         </div>
 
         <section class="workspace-view comparison-workspace" id="comparison-workspace" hidden>

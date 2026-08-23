@@ -124,6 +124,7 @@ const rows = await mapWithConcurrency(candidates, concurrency, async (rawCandida
       name: candidate.name || candidate.symbol,
       officialUniverse: candidate.officialUniverse,
       prescreenScore: candidate.prescreenScore,
+      sectorId: candidate.sector || null,
       sector: decision.evidence.find(({ id }) => id === "sector")?.label || candidate.sector || "待识别",
       price: payload.price,
       score: decision.composite.score,

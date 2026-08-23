@@ -19,6 +19,16 @@ export const CAPABILITY_LABELS = Object.freeze({
 });
 
 const METHODOLOGY_VERSION = "hengce-manager-distillation@1.0.0";
+const METHOD_PROFILES = Object.freeze({
+  "quant-balanced": { methodName: "多因子平衡", sourceLabel: "衡策规则基准（不映射个人）", fit: "希望把市场环境、行业与价格证据放在同一张表里，并按持有期限动态权衡", worry: "单一信号主导仓位", changeCondition: "多层证据持续背离时降级或退出" },
+  buffett: { methodName: "质量价值", sourceLabel: "公开方法论来源：沃伦·巴菲特", fit: "愿意长期等待少数好生意，并能承受短期价格波动换取长期复利验证", worry: "护城河或现金创造被高估", changeCondition: "现金流不可重复、护城河受损或价格失去安全边际" },
+  munger: { methodName: "质量逆向", sourceLabel: "公开方法论来源：查理·芒格", fit: "偏好少而精，愿意先排除永久损失与激励错位，再集中研究", worry: "激励失真与永久资本损失", changeCondition: "治理、杠杆或行业结构出现不可逆恶化" },
+  graham: { methodName: "深度价值", sourceLabel: "公开方法论来源：本杰明·格雷厄姆", fit: "更在意少付钱和资产保护，能耐心等待价格向保守价值回归", worry: "折价只是基本面恶化的价值陷阱", changeCondition: "保守价值下修或资产负债表侵蚀安全边际" },
+  lynch: { methodName: "合理价格成长", sourceLabel: "公开方法论来源：彼得·林奇", fit: "喜欢能讲清楚的成长故事，并愿意每季度用收入、利润和现金流验真", worry: "故事跑在财务兑现前面", changeCondition: "增长放缓、现金流掉队或估值透支未来" },
+  marks: { methodName: "周期防守", sourceLabel: "公开方法论来源：霍华德·马克斯", fit: "首要目标是少犯大错，愿意在风险补偿不足时持有更多现金等待", worry: "周期高位仍承担不足补偿的下行风险", changeCondition: "风险溢价、信用条件或现金流承受力明显改善/恶化" },
+  dalio: { methodName: "全天候风险平衡", sourceLabel: "公开方法论来源：瑞·达利欧", fit: "关注整个组合能否穿越增长与通胀情景，不想把风险押在单一股票或路径上", worry: "表面分散、实际风险同向", changeCondition: "跨资产相关性或边际风险贡献显著改变" },
+  soros: { methodName: "趋势反馈", sourceLabel: "公开方法论来源：乔治·索罗斯", fit: "接受小仓试错和快速纠错，希望参与预期、资金与价格自我强化的趋势", worry: "反馈回路反转却未及时退出", changeCondition: "催化消退、价格不确认或趋势破位时快速降仓" },
+});
 const DEFAULT_EVIDENCE_POLICY = Object.freeze({
   primarySourceRequired: true,
   minimumIndependentSources: 2,
@@ -219,6 +229,7 @@ const MANAGER_DEFINITIONS = [
     name: "瑞·达利欧",
     nameEn: "Ray Dalio",
     initials: "RD",
+    avatarSrc: new URL("./assets/portfolio-managers/ray-dalio-avatar.png", import.meta.url).href,
     school: "跨资产宏观风险平衡",
     mandate: "把股票、债券、通胀敏感资产、黄金与现金放进增长和通胀四象限，以跨资产相关性和风险贡献实现分散；不用于孤立单股定仓。",
     horizon: "宏观周期",
@@ -242,6 +253,7 @@ const MANAGER_DEFINITIONS = [
     name: "乔治·索罗斯",
     nameEn: "George Soros",
     initials: "GS",
+    avatarSrc: new URL("./assets/portfolio-managers/george-soros-avatar.png", import.meta.url).href,
     school: "反身性宏观",
     mandate: "观察叙事、价格与资金之间的反馈回路；允许快速纠错，并只在非对称机会中集中风险。",
     horizon: "数周–数月",
@@ -264,6 +276,7 @@ export const PORTFOLIO_MANAGERS = Object.freeze(MANAGER_DEFINITIONS.map((manager
   const policy = MANAGER_OPERATING_POLICIES[manager.id];
   return Object.freeze({
     ...manager,
+    ...METHOD_PROFILES[manager.id],
     methodologyVersion: METHODOLOGY_VERSION,
     decisionCadence: policy.decisionCadence,
     universe: Object.freeze({
@@ -300,6 +313,18 @@ function normalizedPreferences(value = {}) {
 
 export function resolvePortfolioManager(id) {
   return MANAGER_BY_ID.get(id) || MANAGER_BY_ID.get(DEFAULT_PORTFOLIO_MANAGER_ID);
+}
+
+export function mostDifferentPortfolioManager(managerId) {
+  const current = resolvePortfolioManager(managerId);
+  const currentGates = new Set(current.hardGateCapabilities);
+  const distance = (candidate) => {
+    const factorDistance = Object.keys(current.factorBias).reduce((sum, key) => sum + Math.abs((current.factorBias[key] || 0) - (candidate.factorBias[key] || 0)), 0);
+    const gateDistance = new Set([...current.hardGateCapabilities, ...candidate.hardGateCapabilities]).size
+      - [...currentGates].filter((gate) => candidate.hardGateCapabilities.includes(gate)).length;
+    return factorDistance + gateDistance * 0.75 + Math.abs(current.exposureBias - candidate.exposureBias) / 10;
+  };
+  return PORTFOLIO_MANAGERS.filter(({ id }) => id !== current.id).sort((a, b) => distance(b) - distance(a))[0];
 }
 
 export function assignPortfolioManager(portfolio, managerId) {
@@ -343,6 +368,11 @@ export function managerCoverageFor(managerId, availableCapabilities = []) {
     nameEn: manager.nameEn,
     initials: manager.initials,
     school: manager.school,
+    methodName: manager.methodName,
+    sourceLabel: manager.sourceLabel,
+    fit: manager.fit,
+    worry: manager.worry,
+    changeCondition: manager.changeCondition,
     mandate: manager.mandate,
     horizon: manager.horizon,
     focus: manager.focus,

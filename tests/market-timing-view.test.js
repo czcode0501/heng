@@ -110,7 +110,9 @@ test("market timing workspace renders source-backed scores and automatic update 
   assert.match(html, /区间变化/);
   assert.match(html, /data-market-timing-chart/);
   assert.match(html, /timing-chart-tooltip/);
-  assert.match(html, /五维证据随所选区间重新计算/);
+  assert.match(html, /五项证据随所选区间重新计算/);
+  assert.match(html, /最多投入风险资产/);
+  assert.match(html, /其余保留现金/);
   assert.doesNotMatch(html, /data-refresh-market-timing/);
   assert.doesNotMatch(html, /等待定义|演示数据|实时数据已连接/);
 });

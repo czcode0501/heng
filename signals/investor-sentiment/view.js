@@ -47,7 +47,7 @@ function renderHeader(payload) {
   const checkedAt = Number.isNaN(generated.getTime()) ? "—" : `最近检查 ${generated.toLocaleString("zh-CN", { hour12: false })}`;
   return `<a class="back-link" href="#signals">← 返回模型信号目录</a>
     <header class="signal-detail-header sentiment-detail-header">
-      <div><p class="eyebrow">INVESTOR SENTIMENT</p><h2>投资者情绪</h2><p>把恐慌、参与、仓位代理和投机行为合成为可审计的市场情绪阶段；情绪只负责回答“是否拥挤、是否改善”，不替代市场择时。</p></div>
+      <div><p class="eyebrow">市场情绪</p><h2>投资者情绪</h2><p>看市场是否过度恐慌或过度乐观，以及情绪是在改善还是恶化。它能提醒拥挤风险，但不能单独决定买卖。</p></div>
       <div class="sentiment-header-status"><span class="quality-status ${status === "数据通过" ? "passed" : ""}">${status}</span><small>${escapeHtml(checkedAt)}</small></div>
     </header>`;
 }
@@ -59,7 +59,7 @@ function renderSummaryCard(market, options) {
   return `<article class="sentiment-summary-card ${meta.className}">
     <header><span>${meta.code}</span><div><small>${meta.english}</small><h3>${escapeHtml(market.title)}</h3></div><em>${market.status === "live" ? "自动更新" : "共享缓存"}</em></header>
     <div class="sentiment-summary-body"><div class="sentiment-score"><small>情绪水平</small><strong>${summary.endValue.toFixed(0)}</strong><span>0 恐慌 · 100 贪婪</span></div>
-      <div class="sentiment-summary-phase"><span class="sentiment-phase ${summary.phase.tone}">${escapeHtml(summary.phase.label)}</span><strong class="${summary.impulse >= 0 ? "positive" : "negative"}">情绪动量 ${signed(summary.impulse)}</strong><p>${escapeHtml(summary.phase.summary)}</p></div></div>
+      <div class="sentiment-summary-phase"><span class="sentiment-phase ${summary.phase.tone}">${escapeHtml(summary.phase.label)}</span><strong class="${summary.impulse >= 0 ? "positive" : "negative"}">情绪变化速度 ${signed(summary.impulse)}</strong><p>${escapeHtml(summary.phase.summary)} ${summary.impulse >= 0 ? "情绪正在改善，但仍需价格和市场环境确认。" : "情绪正在恶化，先减少追高并等待企稳。"}</p></div></div>
     <footer><span><b>区间</b>${escapeHtml(summary.startDate)} → ${escapeHtml(summary.endDate)}</span><span><b>可信度</b>${Number(market.confidence || 0).toFixed(0)}%</span><span><b>数据截止</b>${escapeHtml(market.asOf)}</span></footer>
   </article>`;
 }
@@ -93,7 +93,7 @@ function renderMarket(market, options) {
   const meta = marketMeta(market.id);
   if (!summary) return "";
   return `<article class="sentiment-market-workspace ${meta.className}"><header class="sentiment-market-title"><div><span>${meta.code}</span><div><small>${meta.english}</small><h3>${escapeHtml(market.title)} · 情绪证据</h3></div></div><p>${escapeHtml(market.source?.name)} · 无需用户配置 API Key · 复用共享缓存</p></header>
-    <section class="sentiment-market-overview"><div class="sentiment-level-panel"><span>LEVEL</span><strong>${summary.endValue.toFixed(0)}</strong><small>情绪水平</small></div><div class="sentiment-impulse-panel"><span>IMPULSE</span><strong class="${summary.impulse >= 0 ? "positive" : "negative"}">${signed(summary.impulse)}</strong><small>情绪动量</small></div><div class="sentiment-phase-panel"><span>REGIME</span><strong>${escapeHtml(summary.phase.label)}</strong><p>${escapeHtml(summary.phase.summary)}</p></div><div class="sentiment-confidence-panel"><span>CONFIDENCE</span><strong>${Number(market.confidence || 0).toFixed(0)}%</strong><small>${escapeHtml(market.dataQuality?.label || "数据检查中")}</small></div></section>
+    <section class="sentiment-market-overview"><div class="sentiment-level-panel"><span>情绪水平</span><strong>${summary.endValue.toFixed(0)}</strong><small>越高越乐观</small></div><div class="sentiment-impulse-panel"><span>变化速度（Impulse）</span><strong class="${summary.impulse >= 0 ? "positive" : "negative"}">${signed(summary.impulse)}</strong><small>正数改善，负数恶化</small></div><div class="sentiment-phase-panel"><span>当前阶段（Regime）</span><strong>${escapeHtml(summary.phase.label)}</strong><p>${escapeHtml(summary.phase.summary)}</p></div><div class="sentiment-confidence-panel"><span>结果可信度</span><strong>${Number(market.confidence || 0).toFixed(0)}%</strong><small>${escapeHtml(market.dataQuality?.label || "数据检查中，请等待完成后再行动")}</small></div></section>
     <div class="sentiment-evidence-grid">${renderChart(market, summary, options)}${renderDimensions(summary)}</div>${renderLegacyMethods(market)}
     <footer class="sentiment-source-note"><span>数据口径</span><p>恐慌、参与、仓位代理与投机行为先在各维度内去重，再合成为情绪水平；高分表示贪婪，低分表示恐慌。${escapeHtml(market.dataQuality?.reusedSharedMarketCache ? "行情来自已加载的共享缓存，本页面不会重复请求同一数据源。" : "")}</p></footer>
   </article>`;
@@ -108,7 +108,7 @@ export function renderInvestorSentimentWorkspaceLoading() {
 }
 
 export function renderInvestorSentimentWorkspaceError(message) {
-  return `${renderHeader({ markets: [] })}<section class="sentiment-page-error" role="alert"><strong>暂时无法生成投资者情绪分析</strong><p>${escapeHtml(message)}</p><small>系统不会用演示数字替代真实行情。</small></section>`;
+  return `${renderHeader({ markets: [] })}<section class="sentiment-page-error" role="alert"><strong>暂时无法生成投资者情绪分析</strong><p>${escapeHtml(message)}</p><small>先不要用情绪决定买卖，请稍后重新进入本页。系统不会用演示数字替代真实行情。</small></section>`;
 }
 
 export function renderInvestorSentimentWorkspace(payload, options = {}) {

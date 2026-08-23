@@ -188,13 +188,13 @@ export function renderTechnicalChart(market, options = {}) {
   const candlesJson = escapeHtml(JSON.stringify(candles));
   const headerActions = options.headerActions || "";
   return `<section class="micro-chart-card ${escapeHtml(options.className || "")}">
-    <header><div><span>${escapeHtml(options.eyebrow || "PRICE × TECHNICAL EVIDENCE")}</span><h4>${escapeHtml(options.title || "K线、订单流与技术指标")}</h4></div><div class="micro-chart-header-actions">${headerActions}<div class="micro-chart-legend" aria-label="图例"><span class="vwap"><i></i>${vwapEstimated ? "VWAP（估算）" : "VWAP"}</span><span class="buyer"><i></i>买方估算</span><span class="seller"><i></i>卖方估算</span><span class="vacuum"><i></i>低成交真空区</span></div></div></header>
-    <div class="micro-indicator-config" aria-label="技术指标参数"><span>RSI 14 · ${escapeHtml(timeframe)}</span><span>MACD 12,26,9</span><span>VWAP · ${vwapMode}</span></div>
+    <header><div><span>${escapeHtml(options.eyebrow || "价格与量价证据")}</span><h4>${escapeHtml(options.title || "价格、成交方向与动量")}</h4></div><div class="micro-chart-header-actions">${headerActions}<div class="micro-chart-legend" aria-label="图例：成交均价、买卖方向估算和低成交区域"><span class="vwap"><i></i>${vwapEstimated ? "成交均价（估算）" : "成交均价"}</span><span class="buyer"><i></i>买方估算</span><span class="seller"><i></i>卖方估算</span><span class="vacuum"><i></i>低成交区</span></div></div></header>
+    <div class="micro-indicator-config" aria-label="专业参数"><span>强弱指标（RSI 14）· ${escapeHtml(timeframe)}</span><span>趋势动量（MACD 12,26,9）</span><span>成交均价（VWAP）· ${vwapMode}</span></div>
     <div class="micro-chart-shell">
       <svg viewBox="0 0 ${CHART_WIDTH} ${CHART_HEIGHT}" role="application" tabindex="0" data-micro-chart data-micro-candles="${candlesJson}" data-value-unit="${escapeHtml(valueUnit)}" data-currency="${escapeHtml(currency)}" aria-label="${escapeHtml(options.ariaLabel || "K线、VWAP、估算订单流、RSI与MACD走势图。移动鼠标或使用左右方向键查看具体时间和指标值。")}">
         <line class="micro-flow-baseline" x1="${CANDLE_LEFT}" x2="${CANDLE_RIGHT}" y1="${FLOW_BASELINE}" y2="${FLOW_BASELINE}"></line>
-        <text class="micro-axis-label" x="${CANDLE_LEFT}" y="274">订单流柱 · 上方买方 / 下方卖方</text><text class="micro-axis-label" x="${PROFILE_LEFT}" y="16">成交量轮廓 VRVP</text>
-        <text class="micro-axis-label" x="${CANDLE_LEFT}" y="360">RSI（14） · 70过热 / 30过冷</text><text class="micro-axis-label" x="${CANDLE_LEFT}" y="498">MACD（12,26,9）</text>
+        <text class="micro-axis-label" x="${CANDLE_LEFT}" y="274">成交方向估算 · 上方买方 / 下方卖方</text><text class="micro-axis-label" x="${PROFILE_LEFT}" y="16">历史成交密集区（VRVP）</text>
+        <text class="micro-axis-label" x="${CANDLE_LEFT}" y="360">价格强弱（RSI 14）· 70偏热 / 30偏冷</text><text class="micro-axis-label" x="${CANDLE_LEFT}" y="498">趋势动量（MACD 12,26,9）</text>
         ${geometry.vacuumMarkup}${geometry.candleMarkup}${geometry.vwapMarkup}${geometry.flowMarkup}${geometry.profileMarkup}${geometry.levels}${geometry.rsiMarkup}${geometry.macdMarkup}
         <line class="micro-chart-cursor" x1="0" x2="0" y1="${PRICE_TOP}" y2="618"></line>
         <rect class="micro-chart-hit-zone" x="${CANDLE_LEFT}" y="${PRICE_TOP}" width="${CANDLE_RIGHT - CANDLE_LEFT}" height="594"></rect>
@@ -202,9 +202,9 @@ export function renderTechnicalChart(market, options = {}) {
       <div class="micro-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em><small>--</small><small data-indicator-values>--</small><small data-vwap-value>--</small></div>
     </div>
     <div class="micro-indicator-readout" aria-label="最新技术指标判断">
-      <article><span>RSI 动量</span><strong>${rsi == null ? "数据预热中" : rsi.toFixed(1)}</strong><small>${rsi == null ? "至少需要14根K线" : rsi >= 70 ? "偏热，注意追高风险" : rsi <= 30 ? "偏冷，等待反转确认" : rsi >= 50 ? "中性偏强" : "中性偏弱"}</small></article>
-      <article><span>MACD 动量</span><strong class="${histogram != null && histogram >= 0 ? "positive" : "negative"}">${histogram == null ? "数据预热中" : `${histogram >= 0 ? "+" : ""}${histogram.toFixed(3)}`}</strong><small>${histogram == null ? "等待有效K线" : histogram >= 0 ? "柱体位于零轴上方" : "柱体位于零轴下方"}</small></article>
-      <article><span>${vwapEstimated ? "代理 VWAP" : "VWAP"}</span><strong>${vwap == null ? "数据不足" : formatChartValue(vwap, valueUnit, currency)}</strong><small>${vwapDistance == null ? "等待成交量数据" : `现价${vwapDistance >= 0 ? "高于" : "低于"} ${Math.abs(vwapDistance).toFixed(2)}%`}</small></article>
+      <article><span>价格强弱（RSI）</span><strong>${rsi == null ? "还不能判断" : rsi.toFixed(1)}</strong><small>${rsi == null ? "至少需要14根K线，请等待更多数据" : rsi >= 70 ? "价格偏热，先别追高" : rsi <= 30 ? "价格偏冷，等待止跌确认" : rsi >= 50 ? "买方略占优势，可继续观察" : "卖方略占优势，暂缓行动"}</small></article>
+      <article><span>趋势动量（MACD）</span><strong class="${histogram != null && histogram >= 0 ? "positive" : "negative"}">${histogram == null ? "还不能判断" : `${histogram >= 0 ? "+" : ""}${histogram.toFixed(3)}`}</strong><small>${histogram == null ? "有效K线不足，请等待更新" : histogram >= 0 ? "上涨动力占优，但仍需价格确认" : "下跌动力占优，先控制仓位"}</small></article>
+      <article><span>成交均价（VWAP）</span><strong>${vwap == null ? "还不能计算" : formatChartValue(vwap, valueUnit, currency)}</strong><small>${vwapDistance == null ? "缺少成交量，请等待数据恢复" : `现价${vwapDistance >= 0 ? "高于" : "低于"}成交均价 ${Math.abs(vwapDistance).toFixed(2)}%`}</small></article>
     </div>
   </section>`;
 }
@@ -222,10 +222,10 @@ function renderMarket(market, selections, activeId, range) {
       <div><span>卖方估算</span><strong>${finite(summary.sellShare).toFixed(1)}%</strong><small>主动成交代理</small></div>
       <div><span>净量差 Delta</span><strong class="${finite(summary.delta) >= 0 ? "positive" : "negative"}">${finite(summary.delta) >= 0 ? "+" : ""}${compactVolume(summary.delta)}</strong><small>买方估算 − 卖方估算</small></div>
     </section>
-    ${renderTechnicalChart(market, { title: "K线、订单流、VRVP 与动量指标", eyebrow: "PRICE × ESTIMATED ORDER FLOW", valueUnit: "points", ariaLabel: `${market.instrument.title}指数点位、ETF估算订单流、RSI、MACD与VWAP图。移动鼠标或使用左右方向键查看具体时间和指标值。` })}
+    ${renderTechnicalChart(market, { title: "价格、成交密集区与动量", eyebrow: "价格与估算成交方向", valueUnit: "points", ariaLabel: `${market.instrument.title}价格、ETF成交方向估算、历史成交密集区、价格强弱、趋势动量和成交均价走势图。移动鼠标或使用左右方向键查看具体时间。` })}
     <section class="micro-level-grid" aria-label="关键点位结构">
       <article><span>支撑位</span><strong>${formatIndexPoints(market.profile.support)}</strong><p>当前指数点位下方最近的ETF成交密集映射区。</p></article>
-      <article><span>最大成交节点 POC</span><strong>${formatIndexPoints(market.profile.poc)}</strong><p>所选范围内ETF代理成交量映射最多的指数点位区。</p></article>
+      <article><span>成交最密集价位（POC）</span><strong>${formatIndexPoints(market.profile.poc)}</strong><p>这个区间成交最多，价格回到附近时重点观察能否站稳，再决定是否行动。</p></article>
       <article><span>压力位</span><strong>${formatIndexPoints(market.profile.resistance)}</strong><p>当前指数点位上方最近的ETF成交密集映射区。</p></article>
       <article><span>低成交真空区</span><strong>${vacuum ? `${formatIndexPoints(vacuum.low)} – ${formatIndexPoints(vacuum.high)}` : "未识别"}</strong><p>代理成交接受度较低，指数点位穿越时可能加速。</p></article>
     </section>
@@ -234,7 +234,7 @@ function renderMarket(market, selections, activeId, range) {
 }
 
 function header(status = "正在连接数据") {
-  return `<header class="workspace-intro micro-workspace-intro"><div><p class="eyebrow">MICROSTRUCTURE DESK</p><h2>微观数据 · 指数量价结构</h2><p>K线、最新值与关键价位使用中美代表性指数点位；成交量和买卖量由对应高流动性ETF提供代理。</p></div><span class="structure-status">${escapeHtml(status)}</span></header>`;
+  return `<header class="workspace-intro micro-workspace-intro"><div><p class="eyebrow">价格与成交结构</p><h2>微观数据 · 指数量价结构</h2><p>这里看价格走到哪里、哪些区间成交最密集，以及上涨或下跌动力是否跟得上；成交方向由高流动性ETF估算。</p></div><span class="structure-status">${escapeHtml(status)}</span></header>`;
 }
 
 export function renderMicroWorkspaceLoading() {
@@ -242,7 +242,7 @@ export function renderMicroWorkspaceLoading() {
 }
 
 export function renderMicroWorkspaceError(message) {
-  return `${header("数据连接失败")}<section class="micro-error" role="alert"><strong>暂时无法生成微观量价分析</strong><p>${escapeHtml(message)}</p><small>系统不会用虚构数据替代真实行情。</small></section>`;
+  return `${header("数据连接失败")}<section class="micro-error" role="alert"><strong>暂时无法生成微观量价分析</strong><p>${escapeHtml(message)}</p><small>先不要依据本页行动。请稍后重新进入本页；系统不会用虚构数据替代真实行情。</small></section>`;
 }
 
 export function renderMicroWorkspace(payload, options = {}) {

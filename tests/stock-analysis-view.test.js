@@ -266,7 +266,7 @@ test("top manager lens gives a company-specific, evidence-aware manager comment"
     },
   });
 
-  assert.match(html, /霍华德·马克斯对 AAPL 的经理结论/);
+  assert.match(html, /周期防守.*霍华德·马克斯对 AAPL 的经理结论：此方法无法形成结论/);
   assert.match(html, /待补关键证据/);
   assert.match(html, /研究分 41\.5/);
   assert.match(html, /下行风险是否被充分定价/);
@@ -289,9 +289,9 @@ test("single stock analysis renders unified time controls and all technical evid
   assert.match(html, /3月/);
   assert.match(html, /1年/);
   assert.match(html, /VWAP/);
-  assert.match(html, /RSI 14 · 日线/);
+  assert.match(html, /RSI 14）· 日线/);
   assert.match(html, /MACD 12,26,9/);
-  assert.match(html, /订单流估算/);
+  assert.match(html, /买卖方向估算/);
   assert.match(html, /data-micro-chart/);
   assert.match(html, /data-value-unit="currency"/);
   assert.match(html, /data-stock-chart-range/);
@@ -310,9 +310,9 @@ test("single stock analysis renders unified time controls and all technical evid
   assert.ok(html.indexOf("03 · 买多少") < html.indexOf("04 · 等待条件"));
   assert.ok(html.indexOf("04 · 等待条件") < html.indexOf("05 · 失效位"));
   assert.ok(html.indexOf("个股决策卡") < html.indexOf("计划持有多久"));
-  assert.ok(html.indexOf("个股决策卡") < html.indexOf("基金经理方法论"));
+  assert.ok(html.indexOf("个股决策卡") < html.indexOf("投资方法"));
   assert.match(html, /<details class="stock-manager-lens-details">/);
-  assert.ok(html.indexOf("个股决策卡") < html.indexOf("单股K线"));
+  assert.ok(html.indexOf("个股决策卡") < html.indexOf("价格、成交方向与动量"));
 });
 
 test("chart range is an independent accessible control in the technical chart header", () => {

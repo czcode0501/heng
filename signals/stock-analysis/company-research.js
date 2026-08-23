@@ -1,4 +1,5 @@
 import { assessEvidenceQuality, buildManagerDecisionWorkflow, managerContractFor } from "../../portfolio-manager-contract.js";
+import { PORTFOLIO_MANAGERS, mostDifferentPortfolioManager, resolvePortfolioManager } from "../../portfolio-managers.js";
 import { buildCompanyResearchDossier } from "./company-research-dossier.js";
 
 function finite(value) {
@@ -274,6 +275,39 @@ export function buildCompanyManagerInsight(research, managerId) {
       evidence,
       dossier,
     }),
+  };
+}
+
+function comparisonItem(insight, selected = false) {
+  const manager = resolvePortfolioManager(insight.manager.id);
+  const unable = insight.evidence.status !== "verified" || !insight.workflow.canBuy;
+  return {
+    managerId: manager.id,
+    methodName: manager.methodName,
+    sourceLabel: manager.sourceLabel,
+    selected,
+    focus: insight.focus[0] || "待补证",
+    conclusion: unable ? "此方法无法形成结论" : insight.verdict,
+    conclusionDetail: unable ? insight.verdict : insight.narrative.action,
+    maxPosition: unable ? "0%（仅研究）" : manager.sizingPolicy.initialPosition,
+    action: unable ? "等待补证" : insight.verdict,
+    waitingCondition: unable ? `补齐${(insight.workflow.missingHardGateLabels || []).join("、") || "关键事实的 A 级双源核验"}` : insight.narrative.action,
+    exitDiscipline: manager.monitoringPolicy.invalidationRule,
+    worry: manager.worry,
+    changeCondition: insight.narrative.changeMind || manager.changeCondition,
+    evidenceGrade: insight.evidence.grade,
+    reviewCadence: manager.monitoringPolicy.reviewCadence,
+  };
+}
+
+export function buildCompanyMethodComparison(research, managerId) {
+  const current = resolvePortfolioManager(managerId);
+  const counter = mostDifferentPortfolioManager(current.id);
+  const insights = new Map(PORTFOLIO_MANAGERS.map((manager) => [manager.id, buildCompanyManagerInsight(research, manager.id)]));
+  return {
+    current: comparisonItem(insights.get(current.id), true),
+    counter: comparisonItem(insights.get(counter.id)),
+    all: PORTFOLIO_MANAGERS.map((manager) => comparisonItem(insights.get(manager.id), manager.id === current.id)),
   };
 }
 
