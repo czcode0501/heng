@@ -28,8 +28,8 @@ export const signalDirectories = [
     index: "04",
     title: "投资者情绪",
     english: "INVESTOR SENTIMENT",
-    description: "投资者情绪信号的独立分析模块。具体代理变量与解释规则等待定义。",
-    status: "等待定义",
+    description: "分开分析中美市场的恐慌、参与、仓位代理与投机拥挤，并用情绪水平和动量识别六种阶段。",
+    status: "自动更新 · 后台预载",
   },
   {
     id: "capital-flow",
@@ -43,6 +43,9 @@ export const signalDirectories = [
 
 export function resolveWorkspaceRoute(hash = "") {
   const route = hash.replace(/^#/, "").replace(/\/$/, "");
+  if (route === "analysis") return { workspace: "comparison", directory: null };
+  if (route === "micro-data") return { workspace: "micro", directory: null };
+  if (route === "data-sources") return { workspace: "data-sources", directory: null };
   if (route === "signals") return { workspace: "signals", directory: null };
   if (route.startsWith("signals/")) {
     const directory = route.slice("signals/".length);
@@ -50,4 +53,12 @@ export function resolveWorkspaceRoute(hash = "") {
     return { workspace: "signals", directory: isKnownDirectory ? directory : null };
   }
   return { workspace: "overview", directory: null };
+}
+
+export function shouldForceWorkspaceRefresh(currentHash = "", targetHash = "") {
+  const current = resolveWorkspaceRoute(currentHash);
+  const target = resolveWorkspaceRoute(targetHash);
+  return current.workspace === "signals"
+    && current.directory === "market-timing"
+    && target.directory === current.directory;
 }

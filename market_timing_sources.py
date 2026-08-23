@@ -19,7 +19,7 @@ from market_timing import build_china_market, build_us_market
 
 SINA_JSONP_PATTERN = re.compile(r"\(\s*(\[.*\])\s*\)\s*;?\s*$", re.DOTALL)
 REQUEST_TIMEOUT_SECONDS = 15
-MARKET_CACHE_TTL_SECONDS = 30 * 60
+MARKET_CACHE_TTL_SECONDS = 60
 ERROR_CACHE_TTL_SECONDS = 5 * 60
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "market-timing.json"
 MARKET_CACHE_LOCK = threading.Lock()
@@ -110,12 +110,13 @@ def fetch_china_market(force: bool = False) -> dict:
     try:
         bundle = _fetch_china_baostock(force=force)
         source = {
-            "name": "BaoStock",
-            "provider": "baostock",
+            "name": "BaoStock + Yahoo Finance 日内补全",
+            "provider": "baostock+yfinance",
             "mode": "zero-config",
             "access": "无需 API Key",
-            "url": "http://www.baostock.com",
+            "url": "https://ranaroussi.github.io/yfinance/reference/api/yfinance.download.html",
             "isFallback": False,
+            "intraday": True,
         }
     except Exception as primary_error:
         bundle = _fetch_china_sina()

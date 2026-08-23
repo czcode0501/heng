@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { createSignalPreloader } from "../signals/data-preload.js";
+import { createSignalPreloader, isSignalPayloadFresh } from "../signals/data-preload.js";
 
 
 function response(data, ok = true) {
@@ -54,4 +54,14 @@ test("a failed preload can be retried and does not poison individual endpoint fa
   await assert.rejects(() => preloader.getWorkspace("macro"), /预加载失败/);
   assert.deepEqual(await preloader.getWorkspace("macro"), { id: "macro" });
   assert.equal(requestCount, 2);
+});
+
+test("signal payload freshness expires at the server refresh contract", () => {
+  const now = Date.parse("2026-08-17T02:10:00Z");
+  const fresh = { generatedAt: "2026-08-17T02:09:01Z", refreshAfterSeconds: 60 };
+  const stale = { generatedAt: "2026-08-17T02:08:59Z", refreshAfterSeconds: 60 };
+
+  assert.equal(isSignalPayloadFresh(fresh, now), true);
+  assert.equal(isSignalPayloadFresh(stale, now), false);
+  assert.equal(isSignalPayloadFresh({}, now), false);
 });

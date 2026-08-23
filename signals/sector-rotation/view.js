@@ -143,8 +143,8 @@ function renderDetail(market, sector, range, customStart) {
     <div class="sector-evidence-grid">
       <figure class="sector-history-chart">
         <figcaption><div><span>区间走势（起点归一为 100）</span><strong class="${periodChange >= 0 ? "positive" : "negative"}">${signed(periodChange, "%")}</strong></div><small>鼠标移动或使用左右方向键查看具体日期</small></figcaption>
-        <div class="sector-chart-shell"><svg viewBox="0 0 520 132" role="application" tabindex="0" data-sector-chart data-chart-points="${escapeHtml(JSON.stringify(points))}" aria-label="${escapeHtml(sector.title)}交互式走势图"><path class="sector-chart-line" d="${path}"></path><line class="sector-chart-cursor" x1="0" x2="0" y1="0" y2="132"></line><circle class="sector-chart-dot" cx="0" cy="0" r="4"></circle><rect class="sector-chart-hit-zone" width="520" height="132"></rect></svg><div class="sector-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div></div>
-        <footer><span>${escapeHtml(start?.date || "--")}</span><span>${normalized.length} 个交易日</span><span>${escapeHtml(end?.date || "--")}</span></footer>
+        <div class="sector-chart-shell"><svg viewBox="0 0 520 132" preserveAspectRatio="none" role="application" tabindex="0" data-sector-chart data-chart-points="${escapeHtml(JSON.stringify(points))}" aria-label="${escapeHtml(sector.title)}交互式走势图"><path class="sector-chart-line" d="${path}"></path><line class="sector-chart-cursor" x1="0" x2="0" y1="0" y2="132"></line><circle class="sector-chart-dot" cx="0" cy="0" r="4"></circle><rect class="sector-chart-hit-zone" width="520" height="132"></rect></svg><div class="sector-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div></div>
+        <footer class="chart-time-axis"><span>${escapeHtml(start?.date || "--")}</span><span>${normalized.length} 个交易日</span><span>${escapeHtml(end?.date || "--")}</span></footer>
       </figure>
       <div class="sector-dimension-list">${DIMENSIONS.map((dimension) => {
         const score = Number(sector.dimensions?.[dimension.id]) || 0;

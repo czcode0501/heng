@@ -168,7 +168,7 @@ function renderMarket(market, options) {
         <div class="timing-benchmark-block">
           <header><div><span>${escapeHtml(market.benchmark.name)} · ${escapeHtml(rangeLabel(options))}</span><strong>${formatIndex(comparison?.endValue ?? market.benchmark.close)}</strong></div><div class="timing-period-change"><span>区间变化</span><em class="${change >= 0 ? "positive" : "negative"}">${change >= 0 ? "+" : ""}${change.toFixed(2)}%</em></div></header>
           <div class="timing-chart-shell">
-            <svg viewBox="0 0 300 78" role="application" tabindex="0" data-market-timing-chart data-chart-points="${chartPoints}" aria-label="${escapeHtml(market.benchmark.name)}交互式走势图。移动鼠标或使用左右方向键查看具体日期和点位。">
+            <svg viewBox="0 0 300 78" preserveAspectRatio="none" role="application" tabindex="0" data-market-timing-chart data-chart-points="${chartPoints}" aria-label="${escapeHtml(market.benchmark.name)}交互式走势图。移动鼠标或使用左右方向键查看具体日期和点位。">
               <path d="${historyPath}" vector-effect="non-scaling-stroke"></path>
               <line class="timing-chart-cursor" x1="0" x2="0" y1="0" y2="78"></line>
               <circle class="timing-chart-dot" cx="0" cy="0" r="3.5"></circle>
@@ -176,6 +176,7 @@ function renderMarket(market, options) {
             </svg>
             <div class="timing-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div>
           </div>
+          <div class="chart-time-axis"><span>${escapeHtml(comparison?.startDate || "--")}</span><span>${escapeHtml(comparison?.observations || 0)} 个交易日</span><span>${escapeHtml(comparison?.endDate || "--")}</span></div>
           <dl class="timing-period-stats">
             <div><dt>起点</dt><dd>${escapeHtml(comparison?.startDate || "--")} · ${formatIndex(comparison?.startValue || 0)}</dd></div>
             <div><dt>最新</dt><dd>${escapeHtml(comparison?.endDate || "--")} · ${formatIndex(comparison?.endValue || 0)}</dd></div>
@@ -230,10 +231,11 @@ export function renderMarketTimingWorkspace(payload, options = {}) {
   const statusText = liveCount === markets.length ? "数据通过" : liveCount ? "部分数据可用" : "使用缓存或等待数据";
   const generatedAt = new Date(payload.generatedAt);
   const checkedAt = Number.isNaN(generatedAt.getTime()) ? "--" : generatedAt.toLocaleString("zh-CN", { hour12: false });
+  const hasIntraday = markets.some(({ updateMode }) => updateMode === "automatic-intraday");
   return `${workspaceHeader(statusText, liveCount === markets.length ? "passed" : "")}
     ${renderRangePanel(payload, activeOptions)}
     <section class="timing-auto-note" aria-label="自动更新说明">
-      <div><strong>自动更新 · 收盘日线</strong><p>当前比较 ${escapeHtml(rangeLabel(activeOptions))}；每 ${Math.round(getMarketTimingRefreshDelay(payload) / 60000)} 分钟自动检查一次。再次点击左侧“市场择时”可立即刷新。</p></div>
+      <div><strong>自动更新 · ${hasIntraday ? "A股盘中动态日线" : "最新交易日线"}</strong><p>当前比较 ${escapeHtml(rangeLabel(activeOptions))}；每 ${Math.round(getMarketTimingRefreshDelay(payload) / 60000)} 分钟自动检查一次。再次点击左侧“市场择时”可立即刷新。</p></div>
       <dl><div><dt>接口配置</dt><dd>无需 API Key</dd></div><div><dt>最近检查</dt><dd>${escapeHtml(checkedAt)}</dd></div><div><dt>方法版本</dt><dd>${escapeHtml(payload.methodologyVersion || "1.0.0")}</dd></div></dl>
     </section>
     <section class="timing-market-grid" aria-label="中国股票与美国股票市场择时">${markets.map((market) => renderMarket(market, activeOptions)).join("")}</section>

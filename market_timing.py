@@ -189,7 +189,7 @@ def _market_payload(market_id: str, title: str, scope: str, source: dict, benchm
         "scope": scope,
         "status": "live",
         "asOf": benchmark["history"][-1]["date"],
-        "updateMode": "automatic-eod",
+        "updateMode": "automatic-intraday" if source.get("intraday") else "automatic-eod",
         "source": source,
         "benchmark": benchmark,
         "regime": _regime(dimensions),

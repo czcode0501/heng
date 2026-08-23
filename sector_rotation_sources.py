@@ -15,7 +15,7 @@ from market_timing_sources import get_market_timing_dashboard
 from sector_rotation import build_sector_market
 
 
-CACHE_TTL_SECONDS = 30 * 60
+CACHE_TTL_SECONDS = 5 * 60
 ERROR_CACHE_TTL_SECONDS = 5 * 60
 DEFAULT_CACHE_PATH = Path(__file__).resolve().parent / ".cache" / "sector-rotation.json"
 CACHE_LOCK = threading.Lock()

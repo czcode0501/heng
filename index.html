@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0b1017" />
     <title>衡策 Quant Desk</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23168565'/%3E%3Cpath d='M8 9h16v3H8zm0 6h10v3H8zm0 6h16v3H8z' fill='white'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
@@ -20,21 +21,27 @@
         </div>
 
         <nav class="workspace-nav" aria-label="主要导航">
-          <a class="nav-link active" id="nav-overview" href="#overview" aria-current="page">
-            <span aria-hidden="true">▦</span> 总览
-          </a>
-          <a class="nav-link" id="nav-signals" href="#signals"><span aria-hidden="true">⌁</span> 模型信号</a>
-          <div class="signal-subnav" id="signal-subnav" aria-label="模型信号目录"></div>
-          <a class="nav-link" href="#analysis"><span aria-hidden="true">◫</span> 组合对比</a>
-        </nav>
-
-        <section class="portfolio-nav" aria-labelledby="portfolio-heading">
-          <div class="section-heading-row">
-            <h2 id="portfolio-heading">我的组合</h2>
-            <button class="icon-button" id="open-create-dialog" type="button" aria-label="创建新投资组合">＋</button>
+          <button class="nav-link nav-disclosure active" id="nav-overview" type="button" aria-controls="overview-subnav" aria-expanded="true" aria-current="page">
+            <span aria-hidden="true">▦</span><span class="nav-disclosure-label">总览</span><span class="nav-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="nav-disclosure-panel overview-subnav is-expanded" id="overview-subnav" aria-label="总览目录" aria-hidden="false">
+            <a class="overview-subnav-link active" href="#overview" aria-current="page"><span aria-hidden="true">01</span>我的组合</a>
+            <section class="portfolio-nav" aria-labelledby="portfolio-heading">
+              <div class="section-heading-row">
+                <h2 id="portfolio-heading">我的组合</h2>
+                <button class="icon-button" id="open-create-dialog" type="button" aria-label="创建新投资组合">＋</button>
+              </div>
+              <div id="portfolio-list" class="portfolio-list"></div>
+            </section>
           </div>
-          <div id="portfolio-list" class="portfolio-list"></div>
-        </section>
+          <button class="nav-link nav-disclosure" id="nav-signals" type="button" aria-controls="signal-subnav" aria-expanded="false">
+            <span aria-hidden="true">⌁</span><span class="nav-disclosure-label">宏观数据</span><span class="nav-chevron" aria-hidden="true">⌄</span>
+          </button>
+          <div class="signal-subnav nav-disclosure-panel" id="signal-subnav" aria-label="宏观数据目录" aria-hidden="true" inert></div>
+          <a class="nav-link" id="nav-micro" href="#micro-data"><span aria-hidden="true">◎</span> 微观数据</a>
+          <a class="nav-link" id="nav-data-sources" href="#data-sources"><span aria-hidden="true">⌁</span> 券商与数据源</a>
+          <a class="nav-link" id="nav-comparison" href="#analysis"><span aria-hidden="true">◫</span> 组合对比</a>
+        </nav>
 
         <div class="connection-card">
           <span class="status-dot" aria-hidden="true"></span>
@@ -49,12 +56,12 @@
         <header class="topbar">
           <div>
             <p class="page-context"><span>投资工作台</span><span aria-hidden="true">/</span><span id="page-context-current">组合总览</span></p>
-            <h1 id="portfolio-title">核心长期组合</h1>
+            <h1 id="portfolio-title">我的自建组合</h1>
           </div>
           <div class="topbar-actions">
-            <div class="market-state" aria-label="市场状态">
+            <div class="market-state" aria-label="市场状态" role="status" aria-live="polite">
               <span class="status-dot" aria-hidden="true"></span>
-              <span>A股与美股 · 收盘日线自动更新</span>
+              <span id="market-data-status">A股盘中 / 美股交易时段 · 行情连接中</span>
             </div>
             <div class="search-wrap">
               <label class="sr-only" for="stock-search">搜索A股或美股</label>
@@ -70,9 +77,35 @@
         </header>
 
         <div class="workspace-view" id="overview-workspace">
-        <section class="metrics-grid" aria-label="组合概览">
+        <section class="panel today-action-panel" id="today-action-panel" aria-label="今日交易工作台" aria-live="polite">
+          <p class="today-action-loading">正在汇总组合、市场与券商状态…</p>
+        </section>
+        <section class="panel broker-positions-panel" id="broker-positions-panel" hidden aria-labelledby="broker-positions-title">
+          <div class="panel-header broker-panel-header">
+            <div>
+              <p class="eyebrow">IBKR ACCOUNT · BROKER AUTHORITATIVE</p>
+              <h2 id="broker-positions-title">IBKR 真实账户与持仓</h2>
+              <p id="broker-positions-meta" role="status" aria-live="polite">尚未连接券商账户</p>
+            </div>
+            <div class="broker-header-actions">
+              <button class="button primary" id="refresh-broker-positions" type="button">刷新券商数据</button>
+              <a class="button secondary" href="#data-sources">管理连接</a>
+            </div>
+          </div>
+          <div class="broker-account-summary" id="broker-account-summary"></div>
+          <div id="broker-allocation"></div>
+          <div class="table-wrap broker-table-wrap">
+            <table>
+              <thead><tr><th scope="col">账户 / 标的</th><th scope="col">市场</th><th scope="col">持仓数量</th><th scope="col">最新价</th><th scope="col">平均买入价</th><th scope="col">持仓成本</th><th scope="col">持仓市值</th><th scope="col">浮动盈亏</th></tr></thead>
+              <tbody id="broker-positions-body"></tbody>
+            </table>
+          </div>
+          <p class="broker-readonly-note"><strong>真实数据边界：</strong>数值直接来自 IBKR TWS Account Window；账户与持仓通常约 3 分钟更新。只读连接不会发送、修改或撤销任何订单，券商未返回的字段会明确显示“不可用”。</p>
+        </section>
+
+        <section class="metrics-grid research-metrics" id="research-metrics" aria-label="自建投资组合概览">
           <article class="metric-card primary-metric">
-            <div class="metric-label">组合总市值 <span class="live-label">实时</span></div>
+            <div class="metric-label">自建组合总市值 <span class="live-label">自定义持仓</span></div>
             <strong id="total-value">¥0</strong>
             <div class="metric-foot"><span id="total-change" class="gain">—</span><span>今日收益</span></div>
           </article>
@@ -83,33 +116,35 @@
           </article>
           <article class="metric-card">
             <div class="metric-label">目标仓位</div>
-            <strong id="target-position">35%</strong>
-            <div class="metric-foot"><span class="neutral">宏观 30% + 择时 5%</span></div>
+            <strong id="target-position">—</strong>
+            <div class="metric-foot"><span class="neutral" id="target-position-detail">根据实际持仓市场计算</span></div>
           </article>
           <article class="metric-card">
             <div class="metric-label">风险状态</div>
-            <strong class="risk-state">中性偏多</strong>
-            <div class="metric-foot"><span class="neutral">宏观评分 +1</span></div>
+            <strong class="risk-state" id="custom-risk-state">待建仓</strong>
+            <div class="metric-foot"><span class="neutral" id="custom-risk-detail">建立持仓后计算仓位偏差</span></div>
           </article>
         </section>
 
-        <section class="dashboard-grid" id="overview">
+        <section class="dashboard-grid" id="custom-portfolio-dashboard">
           <article class="panel holdings-panel">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">POSITIONS</p>
-                <h2>当前持仓</h2>
+                <p class="eyebrow">RESEARCH PORTFOLIO</p>
+                <h2>自建观察组合持仓</h2>
               </div>
               <button class="button secondary" id="focus-search" type="button">＋ 添加标的</button>
             </div>
-            <div class="table-wrap">
+            <div class="table-wrap" id="custom-holdings-table-wrap">
               <table>
                 <thead>
                   <tr>
                     <th scope="col">标的</th>
                     <th scope="col">市场</th>
+                    <th scope="col">买入均价</th>
                     <th scope="col">最新价</th>
                     <th scope="col">今日</th>
+                    <th scope="col">建仓盈亏</th>
                     <th scope="col">持仓市值</th>
                     <th scope="col">权重</th>
                     <th scope="col"><span class="sr-only">操作</span></th>
@@ -118,6 +153,7 @@
                 <tbody id="holdings-body"></tbody>
               </table>
             </div>
+            <section id="manager-holdings-review" class="manager-holdings-review" aria-live="polite" hidden></section>
             <div id="holdings-empty" class="empty-state" hidden>
               <strong>这个组合还没有持仓</strong>
               <p>通过顶部搜索框添加A股或美股，开始验证你的投资思路。</p>
@@ -131,7 +167,7 @@
                 <p class="eyebrow">ALLOCATION</p>
                 <h2 id="allocation-title">仓位分布</h2>
               </div>
-              <button class="icon-button" type="button" aria-label="仓位分布设置">•••</button>
+              <button class="icon-button" id="open-allocation-dialog" type="button" aria-label="仓位分布设置">•••</button>
             </div>
             <div class="allocation-visual">
               <div id="allocation-ring" class="allocation-ring" role="img" aria-label="股票与现金仓位占比">
@@ -142,25 +178,53 @@
           </aside>
         </section>
 
+        <section class="panel portfolio-manager-panel" id="portfolio-manager-panel" aria-label="当前组合基金经理" aria-live="polite">
+          <p class="manager-panel-loading">正在载入基金经理方法论…</p>
+        </section>
+
         <section class="panel signals-panel" id="overview-signals">
           <div class="panel-header">
             <div>
-              <p class="eyebrow">MODEL SIGNALS</p>
-              <h2>模型信号</h2>
+              <p class="eyebrow">MACRO DATA</p>
+              <h2>宏观数据</h2>
             </div>
-            <a class="text-link" href="#signals">进入信号工作区 →</a>
+            <a class="text-link" href="#signals">进入宏观数据工作区 →</a>
           </div>
           <div class="overview-signal-links" id="overview-signal-links"></div>
         </section>
         </div>
 
+        <section class="workspace-view comparison-workspace" id="comparison-workspace" hidden>
+          <header class="workspace-intro comparison-intro">
+            <div>
+              <p class="eyebrow">PORTFOLIO COMPARISON</p>
+              <h2>投资思路横向对比</h2>
+              <p>使用同一估值口径比较每个组合的总市值、累计收益、当日变化和资产结构。结果由当前组合的数量、成本、现金和行情价格计算，不单独写死对比数字。</p>
+            </div>
+            <span class="structure-status">本机自动保存</span>
+          </header>
+          <div class="comparison-grid" id="comparison-grid" aria-label="组合对比卡片"></div>
+          <article class="panel comparison-table-panel">
+            <div class="panel-header">
+              <div><p class="eyebrow">RANKING</p><h2>组合表现排行</h2></div>
+              <span class="comparison-note">按建仓以来收益排序</span>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th scope="col">排名</th><th scope="col">组合</th><th scope="col">总市值</th><th scope="col">累计收益</th><th scope="col">今日变化</th><th scope="col">持仓数</th></tr></thead>
+                <tbody id="comparison-table-body"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
         <section class="workspace-view signals-workspace" id="signals-workspace" hidden>
           <div id="signals-hub">
             <header class="workspace-intro">
               <div>
-                <p class="eyebrow">MODEL SIGNALS</p>
-                <h2>五类分析目录</h2>
-                <p>每个模块将独立完成分析，最终共同组成模型信号的综合结果。当前仅建立结构，具体规则等待你逐项定义。</p>
+                <p class="eyebrow">MACRO DATA</p>
+                <h2>宏观数据分析目录</h2>
+                <p>集中观察宏观环境、市场时机、板块轮动、投资者情绪与资金流向，并保留五个既有分析模块的数据与功能。</p>
               </div>
               <span class="structure-status">结构已建立 · 等待定义</span>
             </header>
@@ -168,6 +232,9 @@
           </div>
           <article class="signal-detail" id="signal-detail" hidden></article>
         </section>
+
+        <section class="workspace-view signals-workspace micro-workspace" id="micro-workspace" hidden aria-live="polite"></section>
+        <section class="workspace-view data-sources-workspace" id="data-sources-workspace" hidden aria-live="polite"></section>
       </main>
     </div>
 
@@ -187,6 +254,55 @@
         <div class="dialog-actions">
           <button class="button secondary" value="cancel" type="button" id="cancel-create">取消</button>
           <button class="button primary" value="default" type="submit">创建组合</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="allocation-dialog" class="allocation-dialog" aria-labelledby="allocation-dialog-title">
+      <form method="dialog" id="allocation-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">ALLOCATION SETTINGS</p>
+            <h2 id="allocation-dialog-title">编辑仓位分布</h2>
+            <p id="allocation-portfolio-name"></p>
+          </div>
+          <button class="icon-button" value="cancel" aria-label="关闭仓位设置">×</button>
+        </div>
+        <label class="allocation-cash-field" for="allocation-cash"><span>现金余额（人民币）</span><input id="allocation-cash" type="number" min="0" step="any" required></label>
+        <div class="allocation-edit-heading"><span>持仓</span><small>修改数量和建仓成本；最新价格由行情接口更新</small></div>
+        <div id="allocation-positions" class="allocation-edit-list"></div>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button" id="cancel-allocation">取消</button>
+          <button class="button primary" value="default" type="submit">保存仓位</button>
+        </div>
+      </form>
+    </dialog>
+
+    <dialog id="add-position-dialog" class="add-position-dialog" aria-labelledby="add-position-title">
+      <form method="dialog" id="add-position-form">
+        <div class="dialog-header">
+          <div>
+            <p class="eyebrow">BUILD POSITION</p>
+            <h2 id="add-position-title">设置建仓数量</h2>
+            <p id="add-position-stock">请选择股票</p>
+          </div>
+          <button class="icon-button" value="cancel" type="button" id="cancel-add-position" aria-label="关闭建仓设置">×</button>
+        </div>
+        <fieldset class="purchase-mode-selector">
+          <legend>建仓方式</legend>
+          <label><input name="purchase-mode" value="quantity" type="radio" checked><span><strong>按股数购买</strong><small>直接填写计划购买多少股</small></span></label>
+          <label><input name="purchase-mode" value="amount" type="radio"><span><strong>按金额购买</strong><small>根据投入金额自动计算股数</small></span></label>
+        </fieldset>
+        <label for="purchase-cost">买入价格 <small id="purchase-currency-label">按股票交易币种</small></label>
+        <input id="purchase-cost" name="purchase-cost" type="number" min="0.000001" step="any" required>
+        <label id="purchase-quantity-field" for="purchase-quantity">购买股数</label>
+        <input id="purchase-quantity" name="purchase-quantity" type="number" min="0.000001" step="any" required>
+        <label id="purchase-amount-field" for="purchase-amount" hidden>投入金额</label>
+        <input id="purchase-amount" name="purchase-amount" type="number" min="0.000001" step="any" hidden>
+        <p class="purchase-preview" id="purchase-preview" role="status" aria-live="polite">请填写计划购买股数。</p>
+        <div class="dialog-actions">
+          <button class="button secondary" value="cancel" type="button" id="cancel-add-position-secondary">取消</button>
+          <button class="button primary" value="default" type="submit">确认加入组合</button>
         </div>
       </form>
     </dialog>

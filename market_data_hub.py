@@ -12,10 +12,14 @@ from typing import Iterable
 
 
 CACHE_TTL_SECONDS = 30 * 60
+LATEST_CACHE_TTL_SECONDS = 60
 REQUEST_TIMEOUT_SECONDS = 20
 _BAOSTOCK_LOCK = threading.Lock()
 _YFINANCE_LOCK = threading.Lock()
+_YFINANCE_LATEST_LOCK = threading.Lock()
 _CACHE: dict[str, dict[str, dict]] = {"baostock": {}, "yfinance": {}}
+_LATEST_CACHE: dict[str, dict] = {}
+LATEST_OVERLAY_EXCLUSIONS = {"sh.000974"}
 
 
 def _unique(symbols: Iterable[str]) -> list[str]:
@@ -79,6 +83,75 @@ def _fetch_yfinance_batch(symbols: list[str]) -> dict[str, list[dict]]:
             rows = _yahoo_rows(history, symbol, batch=False)
         bundle[symbol] = rows
     return bundle
+
+
+def _fetch_yfinance_latest_batch(symbols: list[str]) -> dict[str, list[dict]]:
+    """Fetch recent unadjusted daily rows, including today's partial session when available."""
+    import yfinance as yf
+
+    tickers: str | list[str] = symbols if len(symbols) > 1 else symbols[0]
+    frame = yf.download(
+        tickers,
+        period="5d",
+        interval="1d",
+        auto_adjust=False,
+        progress=False,
+        threads=True,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+        multi_level_index=len(symbols) > 1,
+    )
+    return {
+        symbol: _yahoo_rows(frame, symbol, batch=len(symbols) > 1) if not frame.empty else []
+        for symbol in symbols
+    }
+
+
+def baostock_to_yahoo_symbol(symbol: str) -> str:
+    normalized = str(symbol or "").strip().lower()
+    try:
+        exchange, code = normalized.split(".", 1)
+    except ValueError as error:
+        raise ValueError("BaoStock 代码格式不正确") from error
+    suffixes = {"sh": "SS", "sz": "SZ", "bj": "BJ"}
+    if exchange not in suffixes or not code.isdigit():
+        raise ValueError("BaoStock 代码格式不正确")
+    return f"{code}.{suffixes[exchange]}"
+
+
+def merge_latest_rows(history: list[dict], latest: list[dict]) -> list[dict]:
+    """Merge recent provider rows by market date without discarding long history."""
+    combined = {str(row.get("date")): dict(row) for row in history if row.get("date")}
+    for row in latest:
+        market_date = str(row.get("date") or "")
+        if market_date:
+            combined[market_date] = dict(row)
+    return [combined[key] for key in sorted(combined)]
+
+
+def get_yfinance_latest_series(symbols: Iterable[str], *, force: bool = False) -> dict[str, list[dict]]:
+    """Return recent daily rows through the current partial session with a short cache."""
+    requested = _unique(symbols)
+    if not requested:
+        return {}
+    now = time.time()
+    with _YFINANCE_LATEST_LOCK:
+        missing = [
+            symbol
+            for symbol in requested
+            if force or symbol not in _LATEST_CACHE or now >= float(_LATEST_CACHE[symbol].get("expires") or 0)
+        ]
+        if missing:
+            fetched = _fetch_yfinance_latest_batch(missing)
+            expires = time.time() + LATEST_CACHE_TTL_SECONDS
+            for symbol in missing:
+                rows = fetched.get(symbol) or []
+                if rows:
+                    _LATEST_CACHE[symbol] = {"expires": expires, "rows": rows}
+        return {
+            symbol: deepcopy(_LATEST_CACHE[symbol]["rows"])
+            for symbol in requested
+            if symbol in _LATEST_CACHE and _LATEST_CACHE[symbol].get("rows")
+        }
 
 
 def _fetch_baostock_batch(symbols: list[str]) -> dict[str, list[dict]]:
@@ -171,14 +244,30 @@ def get_yfinance_series(
 def get_baostock_series(
     symbols: Iterable[str], *, force: bool = False, minimum: int = 121
 ) -> dict[str, list[dict]]:
-    return _get_series(
+    requested = _unique(symbols)
+    history = _get_series(
         "baostock",
-        symbols,
+        requested,
         force=force,
         minimum=minimum,
         lock=_BAOSTOCK_LOCK,
         fetcher=_fetch_baostock_batch,
     )
+    yahoo_by_baostock = {
+        symbol: baostock_to_yahoo_symbol(symbol)
+        for symbol in requested
+        if symbol.lower() not in LATEST_OVERLAY_EXCLUSIONS
+    }
+    if not yahoo_by_baostock:
+        return history
+    try:
+        latest = get_yfinance_latest_series(yahoo_by_baostock.values(), force=force)
+    except Exception:
+        return history
+    return {
+        symbol: merge_latest_rows(history[symbol], latest.get(yahoo_by_baostock.get(symbol, ""), []))
+        for symbol in requested
+    }
 
 
 def warm_signal_market_data(
@@ -199,6 +288,7 @@ def warm_signal_market_data(
 
 def reset_market_data_hub_cache() -> None:
     """Clear process-local raw-series cache; intended for deterministic tests."""
-    with _BAOSTOCK_LOCK, _YFINANCE_LOCK:
+    with _BAOSTOCK_LOCK, _YFINANCE_LOCK, _YFINANCE_LATEST_LOCK:
         _CACHE["baostock"].clear()
         _CACHE["yfinance"].clear()
+        _LATEST_CACHE.clear()

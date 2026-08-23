@@ -4,11 +4,15 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host 127.0.0.1",
-    "dev:api": "python api_server.py",
+    "dev": "node scripts/dev-stack.mjs",
+    "dev:web": "vite --host 127.0.0.1",
+    "dev:api": "node run-python.mjs api_server.py",
     "test": "npm run test:api && npm run test:ui",
-    "test:api": "python -m unittest discover -s tests -v",
+    "test:api": "node run-python.mjs -m unittest discover -s tests -v",
     "test:ui": "node --test tests/*.test.js",
+    "audit:managers": "node scripts/audit-portfolio-managers.mjs",
+    "scan:prescreen": "node run-python.mjs scripts/prescreen-market.py",
+    "scan:market": "node scripts/scan-stock-decisions.mjs",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

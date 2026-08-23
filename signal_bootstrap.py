@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from capital_flow_sources import build_capital_flow_dashboard
+from investor_sentiment import build_sentiment_dashboard
 from macro_data import get_macro_dashboard
 from market_data_hub import warm_signal_market_data
 from market_timing import apply_market_timing_range
@@ -47,23 +48,23 @@ SOURCE_GROUPS = [
     },
     {
         "id": "china-market",
-        "provider": "BaoStock",
+        "provider": "BaoStock + Yahoo Finance intraday overlay",
         "requestMode": "shared-symbol-union",
-        "cacheTtlSeconds": 1800,
-        "workspaces": ["marketTiming", "sectorRotation", "capitalFlow"],
+        "cacheTtlSeconds": 60,
+        "workspaces": ["marketTiming", "sectorRotation", "investorSentiment", "capitalFlow"],
     },
     {
         "id": "us-market",
         "provider": "Yahoo Finance via yfinance",
         "requestMode": "multi-ticker-shared-symbol-union",
-        "cacheTtlSeconds": 1800,
-        "workspaces": ["marketTiming", "sectorRotation", "capitalFlow"],
+        "cacheTtlSeconds": 300,
+        "workspaces": ["marketTiming", "sectorRotation", "investorSentiment", "capitalFlow"],
     },
     {
         "id": "derived-capital-flow",
         "provider": "Local model",
         "requestMode": "derived-no-external-request",
-        "cacheTtlSeconds": 1800,
+        "cacheTtlSeconds": 300,
         "workspaces": ["capitalFlow"],
     },
 ]
@@ -108,7 +109,7 @@ def _warm_without_blocking_fallback() -> None:
 
 
 def get_signal_bootstrap() -> dict:
-    """Build all four signal views behind one frontend request."""
+    """Build every data-backed signal view behind one frontend request."""
     with ThreadPoolExecutor(max_workers=2) as executor:
         macro_future = executor.submit(get_macro_dashboard, force=False)
         warm_future = executor.submit(_warm_without_blocking_fallback)
@@ -117,6 +118,7 @@ def get_signal_bootstrap() -> dict:
 
     timing_base = get_market_timing_dashboard(force=False)
     timing = apply_market_timing_range(timing_base, "1m", None)
+    sentiment = build_sentiment_dashboard(timing_base)
     rotation = get_sector_rotation_dashboard(force=False)
     capital = build_capital_flow_dashboard(rotation)
     return {
@@ -128,6 +130,7 @@ def get_signal_bootstrap() -> dict:
             "macro": macro,
             "marketTiming": timing,
             "sectorRotation": rotation,
+            "investorSentiment": sentiment,
             "capitalFlow": capital,
         },
     }

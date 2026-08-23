@@ -17,6 +17,7 @@ class SignalBootstrapTests(unittest.TestCase):
         timing = dashboard("2")
         rotation = dashboard("3")
         capital = dashboard("4")
+        sentiment = dashboard("5")
 
         with (
             patch("signal_bootstrap.get_macro_dashboard", return_value=macro) as macro_source,
@@ -24,13 +25,14 @@ class SignalBootstrapTests(unittest.TestCase):
             patch("signal_bootstrap.apply_market_timing_range", return_value={**timing, "selectedRange": "1m"}) as apply_range,
             patch("signal_bootstrap.get_sector_rotation_dashboard", return_value=rotation) as rotation_source,
             patch("signal_bootstrap.build_capital_flow_dashboard", return_value=capital) as capital_builder,
+            patch("signal_bootstrap.build_sentiment_dashboard", return_value=sentiment) as sentiment_builder,
             patch("signal_bootstrap.warm_shared_market_sources") as warm_sources,
         ):
             payload = get_signal_bootstrap()
 
         self.assertEqual(
             set(payload["workspaces"]),
-            {"macro", "marketTiming", "sectorRotation", "capitalFlow"},
+            {"macro", "marketTiming", "sectorRotation", "investorSentiment", "capitalFlow"},
         )
         self.assertEqual(payload["workspaces"]["capitalFlow"], capital)
         self.assertEqual(payload["workspaces"]["marketTiming"]["selectedRange"], "1m")
@@ -42,6 +44,7 @@ class SignalBootstrapTests(unittest.TestCase):
         apply_range.assert_called_once_with(timing, "1m", None)
         rotation_source.assert_called_once_with(force=False)
         capital_builder.assert_called_once_with(rotation)
+        sentiment_builder.assert_called_once_with(timing)
         warm_sources.assert_called_once_with()
 
     def test_source_map_declares_shared_market_data_and_no_duplicate_capital_fetch(self):
@@ -51,6 +54,7 @@ class SignalBootstrapTests(unittest.TestCase):
             patch("signal_bootstrap.apply_market_timing_range", return_value=dashboard("2")),
             patch("signal_bootstrap.get_sector_rotation_dashboard", return_value=dashboard("3")),
             patch("signal_bootstrap.build_capital_flow_dashboard", return_value=dashboard("4")),
+            patch("signal_bootstrap.build_sentiment_dashboard", return_value=dashboard("5")),
             patch("signal_bootstrap.warm_shared_market_sources"),
         ):
             payload = get_signal_bootstrap()
@@ -58,11 +62,11 @@ class SignalBootstrapTests(unittest.TestCase):
         groups = {group["id"]: group for group in payload["sourceGroups"]}
         self.assertEqual(
             groups["china-market"]["workspaces"],
-            ["marketTiming", "sectorRotation", "capitalFlow"],
+            ["marketTiming", "sectorRotation", "investorSentiment", "capitalFlow"],
         )
         self.assertEqual(
             groups["us-market"]["workspaces"],
-            ["marketTiming", "sectorRotation", "capitalFlow"],
+            ["marketTiming", "sectorRotation", "investorSentiment", "capitalFlow"],
         )
         self.assertEqual(groups["derived-capital-flow"]["requestMode"], "derived-no-external-request")
 

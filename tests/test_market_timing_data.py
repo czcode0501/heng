@@ -117,6 +117,16 @@ class MarketTimingContractTests(unittest.TestCase):
         self.assertEqual(market["benchmark"]["symbol"], "^GSPC")
         self.assertEqual(market["updateMode"], "automatic-eod")
 
+    def test_intraday_source_marks_market_as_continuously_updated(self):
+        rising = make_series(3_000, 4)
+        market = build_china_market(
+            {key: rising for key in ["csi300", "sse", "szse", "chinext", "csi1000"]},
+            source={"name": "BaoStock + Yahoo Finance", "mode": "zero-config", "intraday": True},
+        )
+
+        self.assertEqual(market["updateMode"], "automatic-intraday")
+        self.assertEqual(market["asOf"], rising[-1]["date"])
+
     def test_sina_fallback_parser_rejects_markup_and_normalizes_rows(self):
         text = "/*guard*/\nvar _data=([{\"day\":\"2026-08-14\",\"open\":\"10\",\"high\":\"11\",\"low\":\"9\",\"close\":\"10.5\",\"volume\":\"1234\"}]);"
 

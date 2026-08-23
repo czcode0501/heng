@@ -579,6 +579,7 @@ def get_macro_dashboard(force: bool = False) -> dict:
         dashboard = {
             "generatedAt": generated_at,
             "refreshAfterSeconds": CACHE_TTL_SECONDS,
+            "autoRefresh": True,
             "markets": markets,
             "quality": {
                 "status": "passed" if live_count == 2 else "partial",

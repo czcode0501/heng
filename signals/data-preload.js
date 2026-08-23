@@ -1,3 +1,11 @@
+export function isSignalPayloadFresh(payload, nowMs = Date.now()) {
+  const generatedAt = Date.parse(payload?.generatedAt || "");
+  const refreshAfterSeconds = Number(payload?.refreshAfterSeconds);
+  if (!Number.isFinite(generatedAt) || !Number.isFinite(refreshAfterSeconds) || refreshAfterSeconds <= 0) return false;
+  const age = nowMs - generatedAt;
+  return age >= 0 && age < refreshAfterSeconds * 1000;
+}
+
 export function createSignalPreloader(fetchImplementation = globalThis.fetch) {
   let payload = null;
   let request = null;

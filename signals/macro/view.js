@@ -92,7 +92,7 @@ function renderTrendChart(indicator, points) {
   const benchmark = chart.benchmarkY === null ? "" : `<line class="macro-chart-benchmark" x1="5" y1="${chart.benchmarkY.toFixed(2)}" x2="355" y2="${chart.benchmarkY.toFixed(2)}"></line>`;
   return `<figure class="macro-chart">
     <div class="macro-chart-shell">
-      <svg viewBox="0 0 360 72" role="application" tabindex="0" data-macro-chart data-chart-points="${chartPoints}" data-chart-benchmark="${indicator.benchmark ?? ""}" data-chart-unit="${escapeHtml(indicator.unit)}" aria-label="${escapeHtml(indicator.name)}交互式走势图。移动鼠标或使用左右方向键查看具体时间和数值。">
+      <svg viewBox="0 0 360 72" preserveAspectRatio="none" role="application" tabindex="0" data-macro-chart data-chart-points="${chartPoints}" data-chart-benchmark="${indicator.benchmark ?? ""}" data-chart-unit="${escapeHtml(indicator.unit)}" aria-label="${escapeHtml(indicator.name)}交互式走势图。移动鼠标或使用左右方向键查看具体时间和数值。">
         ${benchmark}
         <path class="macro-chart-area" d="${chart.areaPath}"></path>
         <path class="macro-chart-line" d="${chart.path}"></path>
@@ -103,7 +103,7 @@ function renderTrendChart(indicator, points) {
       </svg>
       <div class="macro-chart-tooltip" role="status" aria-live="polite" hidden><strong>--</strong><span>--</span><em>--</em></div>
     </div>
-    <figcaption><span>${escapeHtml(formatPeriod(first.date))}</span><span>${indicator.benchmark === null ? "" : `参考线 ${formatNumber(indicator.benchmark)}`}</span><span>${escapeHtml(formatPeriod(last.date))}</span></figcaption>
+    <figcaption class="chart-time-axis"><span>${escapeHtml(formatPeriod(first.date))}</span><span>${indicator.benchmark === null ? "" : `参考线 ${formatNumber(indicator.benchmark)}`}</span><span>${escapeHtml(formatPeriod(last.date))}</span></figcaption>
   </figure>`;
 }
 
@@ -213,15 +213,16 @@ function renderWorkspaceHeader(data) {
 
 export function renderMacroWorkspace(data, { range = "1m", customStart = "" } = {}) {
   const counts = Object.fromEntries(data.markets.map((market) => [market.id, market.indicators?.length || 0]));
+  const periods = Object.fromEntries(data.markets.map((market) => [market.id, market.analysis?.asOf || "--"]));
   return `${renderWorkspaceHeader(data)}
     <section class="macro-separation-note" aria-label="宏观数据更新状态">
-      <div><span>中国数据</span><strong>${counts.china || 0} 项已连接</strong></div><i aria-hidden="true"></i>
+      <div><span>中国数据</span><strong>${counts.china || 0} 项 · 截至 ${escapeHtml(formatPeriod(periods.china))}</strong></div><i aria-hidden="true"></i>
       <p>自动更新 · 6小时缓存 · 本次检查 ${escapeHtml(formatTimestamp(data.generatedAt))}</p><i aria-hidden="true"></i>
-      <div><span>美国数据</span><strong>${counts["united-states"] || 0} 项已连接</strong></div>
+      <div><span>美国数据</span><strong>${counts["united-states"] || 0} 项 · 截至 ${escapeHtml(formatPeriod(periods["united-states"]))}</strong></div>
     </section>
     <section class="macro-analysis-grid" aria-label="中国与美国宏观环境综合研判">${data.markets.map(renderMarketAnalysis).join("")}</section>
     ${renderRangeControl(range, customStart)}
-    <header class="macro-raw-data-heading"><div><span>RAW INDICATORS</span><h2>原始指标与走势</h2></div><p>模型结论来自下列实时指标；保留原始数据便于逐项核验。</p></header>
+    <header class="macro-raw-data-heading"><div><span>RAW INDICATORS</span><h2>原始指标与走势</h2></div><p>模型结论来自下列最新已发布指标；系统每6小时检查各数据源，不会用当天日期伪造尚未发布的月度数据。</p></header>
     <section class="macro-market-grid" aria-label="中国与美国宏观指标">${data.markets.map((market) => renderMarketPanel(market, range, customStart)).join("")}</section>`;
 }
 
