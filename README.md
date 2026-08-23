@@ -121,6 +121,8 @@ API 返回综合得分、市场阶段、模型风险暴露区间、信心等级�
 
 ```text
 GET /api/signals
+GET /api/instruments/search
+GET /api/quotes
 GET /api/analysis
 GET /api/company-research
 GET /api/macro
@@ -128,12 +130,18 @@ GET /api/market-timing
 GET /api/market-timing?refresh=1
 GET /api/sector-rotation
 GET /api/sector-rotation?refresh=1
+GET /api/investor-sentiment
+GET /api/investor-sentiment?refresh=1
 GET /api/capital-flow
 GET /api/capital-flow?refresh=1
+GET /api/capital-flow/constituents
+GET /api/micro-market
 GET /api/data-sources
+GET /api/health
 POST /api/data-sources/check
 POST /api/news-credentials
 POST /api/broker-accounts/snapshot
+POST /api/broker-accounts/quotes
 ```
 
 ### 公司财报与公司新闻

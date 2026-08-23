@@ -107,22 +107,22 @@ function floorToLot(value, lotSize) {
   return Math.max(0, Math.floor(finite(value) / lot) * lot);
 }
 
-function renderPositionSizing(decision, sizing = {}) {
-  if (decision.action.verb !== "买入") {
-    return `<section class="stock-position-plan is-waiting" aria-label="首笔建仓金额与股数">
-      <div><span>买多少</span><strong>当前不新增仓位</strong><small>先等待动作转为“买入”，已有持仓继续按失效位管理。</small></div>
+function renderPositionSizing(decision, sizing = {}, { compact = false } = {}) {
+  const wrapper = (className, title, value, detail) => compact
+    ? `<article class="decision-essential decision-sizing ${className}"><span>03 · 买多少</span><strong>${value}</strong><small>${title} · ${detail} 只读计划，不会自动提交券商订单。</small></article>`
+    : `<section class="stock-position-plan ${className}" aria-label="首笔建仓金额与股数">
+      <div><span>${title}</span><strong>${value}</strong><small>${detail}</small></div>
       <p>这是只读研究计划，不会自动提交券商订单。</p>
     </section>`;
+  if (decision.action.verb !== "买入") {
+    return wrapper("is-waiting", "买多少", "当前不新增仓位", "等待动作转为“买入”；已有持仓按失效位管理。");
   }
 
   const capital = finite(sizing.capital);
   const cash = finite(sizing.cash);
   const allocation = decision.allocationPlan;
   if (capital <= 0 || cash <= 0 || !allocation) {
-    return `<section class="stock-position-plan is-pending" aria-label="首笔建仓金额与股数">
-      <div><span>首笔计划金额</span><strong>暂不可计算</strong><small>填写现金余额或接入券商真实账户后，再换算金额和股数。</small></div>
-      <p>不会猜测账户资金，也不会自动提交券商订单。</p>
-    </section>`;
+    return wrapper("is-pending", "首笔计划金额", "数据不足，暂不可计算", "填写现金余额或接入券商真实账户后，再换算金额和股数。");
   }
 
   const baseCurrency = sizing.currency || "CNY";
@@ -140,10 +140,7 @@ function renderPositionSizing(decision, sizing = {}) {
   const executableRoom = Math.min(cash, exposureRoom, singleStockCap, riskLimitedAmount);
 
   if (entryInBase <= 0 || invalidation == null || perShareRisk <= 0 || executableRoom <= 0) {
-    return `<section class="stock-position-plan is-pending" aria-label="首笔建仓金额与股数">
-      <div><span>首笔计划金额</span><strong>当前没有可执行空间</strong><small>现金、目标仓位缺口或失效位风险已触及上限。</small></div>
-      <p>调整资金与组合目标后再计算；不会自动提交券商订单。</p>
-    </section>`;
+    return wrapper("is-pending", "首笔计划金额", "当前没有可执行空间", "现金、目标仓位缺口或失效位风险已触及上限。");
   }
 
   const rawLowAmount = executableRoom * allocation.lowPct / 100;
@@ -151,20 +148,21 @@ function renderPositionSizing(decision, sizing = {}) {
   const lotSize = Math.max(1, finite(sizing.lotSize, 1));
   const highShares = floorToLot(rawHighAmount / entryInBase, lotSize);
   if (highShares < lotSize) {
-    return `<section class="stock-position-plan is-pending" aria-label="首笔建仓金额与股数">
-      <div><span>首笔计划金额</span><strong>低于最小交易单位</strong><small>当前风险预算不足以买入 ${lotSize} 股；先补充现金或等待更合适的买入价。</small></div>
-      <p>不会用“0股”伪装成可执行计划，也不会自动提交券商订单。</p>
-    </section>`;
+    return wrapper("is-pending", "首笔计划金额", "低于最小交易单位", `当前预算不足以买入 ${lotSize} 股；不会用“0股”伪装成可执行计划。`);
   }
   const lowShares = Math.min(highShares, Math.max(lotSize, floorToLot(rawLowAmount / entryInBase, lotSize)));
   const lowAmount = lowShares * entryInBase;
   const highAmount = highShares * entryInBase;
   const source = escapeHtml(sizing.sourceLabel || "当前组合");
 
-  return `<section class="stock-position-plan" aria-label="首笔建仓金额与股数">
-    <div><span>首笔计划金额</span><strong>${escapeHtml(formatBaseMoney(lowAmount, baseCurrency))}–${escapeHtml(formatBaseMoney(highAmount, baseCurrency))}</strong><small>约 ${lowShares}–${Math.max(lowShares, highShares)} 股 · ${source} · 组合净值风险上限 ${allocation.maxRiskPct}%</small></div>
-    <p>金额受现金、目标仓位缺口、单股上限与失效位风险共同约束；这是只读计划，不会自动提交券商订单。</p>
-  </section>`;
+  return wrapper("", "首笔计划金额", `${escapeHtml(formatBaseMoney(lowAmount, baseCurrency))}–${escapeHtml(formatBaseMoney(highAmount, baseCurrency))}`, `约 ${lowShares}–${Math.max(lowShares, highShares)} 股 · ${source} · 风险上限 ${allocation.maxRiskPct}%；受现金、目标仓位缺口、单股上限与失效位风险约束。`);
+}
+
+function decisionState(decision) {
+  if (decision.environment.dataState === "unavailable") return { code: "unknown", label: "未知 · 数据不足" };
+  if (decision.action.verb === "买入") return { code: "buy", label: "买入" };
+  if (["持有", "卖出/减仓"].includes(decision.action.verb)) return { code: "manage", label: "持仓管理" };
+  return { code: "wait", label: "等待" };
 }
 
 export function renderStockDecisionDynamicMarkup(payload, options = {}) {
@@ -187,6 +185,7 @@ export function renderStockDecisionDynamicMarkup(payload, options = {}) {
   const riskReward = decision.tradePlan.riskReward == null ? "暂不可计算" : `${decision.tradePlan.riskReward.toFixed(2)} : 1`;
   const expectedReturn = decision.tradePlan.expectedReturnPercent == null ? "暂不可计算" : `+${decision.tradePlan.expectedReturnPercent.toFixed(1)}%`;
   const expectedDownside = decision.tradePlan.downsidePercent == null ? "风险待确认" : `失效风险 -${decision.tradePlan.downsidePercent.toFixed(1)}%`;
+  const state = decisionState(decision);
 
   const missing = decision.manager.missingLabels.length ? decision.manager.missingLabels.join("、") : "当前关键证据已覆盖";
   const insight = options.context?.companyResearchInsight;
@@ -214,15 +213,15 @@ export function renderStockDecisionDynamicMarkup(payload, options = {}) {
   </details>`;
   return `<header class="stock-decision-heading">
       <div><span>QUANT MANAGER · BEGINNER MODE</span><h3 id="stock-decision-title">个股决策卡</h3><p>先看行动建议与风险边界，再查看下方技术证据。</p></div>
-      <em class="stock-decision-status ${escapeHtml(decision.action.tone)}"><b>${escapeHtml(decision.action.verb)}</b><small>${escapeHtml(decision.action.horizon)}</small></em>
+      <em class="stock-decision-status state-${escapeHtml(state.code)} ${escapeHtml(decision.action.tone)}"><b>${escapeHtml(state.label)}</b><small>${escapeHtml(decision.action.horizon)}</small></em>
     </header>
-    <div class="stock-trade-plan" aria-label="持有期限对应的买卖计划">
-      <article class="trade-action ${escapeHtml(decision.action.tone)}"><span>当前动作</span><strong>${escapeHtml(decision.action.verb)}</strong><small>${escapeHtml(decision.action.label)}</small></article>
-      <article class="trade-buy"><span>参考买入价</span><strong>${escapeHtml(formatZone(decision.tradePlan.entry, currency))}</strong><small>进入区间后仍需止跌确认</small></article>
-      <article class="trade-sell"><span>参考卖出价</span><strong>${escapeHtml(formatZone(target, currency))}</strong><small>${decision.holdingPeriod.target === "far" ? "中长期优先观察远端压力" : "短周期优先观察近端压力"}</small></article>
-      <article class="trade-return"><span>预期区间回报</span><strong>${escapeHtml(expectedReturn)}</strong><small>${escapeHtml(decision.tradePlan.hurdleLabel)} · ${escapeHtml(expectedDownside)} · 收益风险比 ${escapeHtml(riskReward)}</small></article>
-    </div>
-    ${renderPositionSizing(decision, options.context?.sizing)}
+    <section class="stock-decision-essentials" aria-label="新手决策五步">
+      <article class="decision-essential decision-action ${escapeHtml(decision.action.tone)}"><span>01 · 行动</span><strong>${escapeHtml(decision.action.verb)}</strong><small>${escapeHtml(decision.action.label)}</small></article>
+      <article class="decision-essential decision-prices"><span>02 · 买卖区间</span><strong>参考买入价 ${escapeHtml(formatZone(decision.tradePlan.entry, currency))}</strong><strong>参考卖出价 ${escapeHtml(formatZone(target, currency))}</strong><small>预期区间回报 ${escapeHtml(expectedReturn)} · ${escapeHtml(expectedDownside)} · 收益风险比 ${escapeHtml(riskReward)}</small></article>
+      ${renderPositionSizing(decision, options.context?.sizing, { compact: true })}
+      <article class="decision-essential decision-wait"><span>04 · 等待条件</span><strong>${nearSupport ? "进入买入区后止跌确认" : "等待可靠价格结构"}</strong><small>${escapeHtml(buyCondition)}</small></article>
+      <article class="decision-essential decision-invalid"><span>05 · 失效位</span><strong>${escapeHtml(invalidation)}</strong><small>${decision.invalidation == null ? "数据不足，不生成虚假止损价。" : "收盘跌破代表原买入理由不再成立。"}</small></article>
+    </section>
     ${renderHoldingPeriodRail(decision.holdingPeriod.id, decision.holdingPeriod.days)}
     <div class="stock-decision-summary">
       <article class="stock-action-summary ${escapeHtml(decision.action.tone)}">

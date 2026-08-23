@@ -999,6 +999,20 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
 .stock-decision-status.positive { color: var(--accent); background: var(--accent-soft); border-color: var(--accent-border); }
 .stock-decision-status.negative { color: var(--danger); background: var(--danger-soft); }
 .stock-decision-status.caution { color: var(--warning); background: var(--warning-soft); }
+.stock-decision-status.state-unknown { color: var(--muted); background: var(--surface); border-style: dashed; }
+.stock-decision-essentials { display: grid; grid-template-columns: .8fr 1.25fr 1fr 1.35fr .9fr; border-bottom: 1px solid var(--border); }
+.decision-essential { min-width: 0; padding: 18px 16px; border-right: 1px solid var(--border); }
+.decision-essential:last-child { border-right: 0; }
+.decision-essential > span, .decision-essential > strong, .decision-essential > small { display: block; }
+.decision-essential > span { color: var(--muted); font-size: var(--font-size-xs); font-weight: 800; }
+.decision-essential > strong { margin-top: 7px; overflow-wrap: anywhere; font-size: var(--font-size-sm); line-height: 1.4; }
+.decision-essential > small { margin-top: 7px; color: var(--subtle); font-size: var(--font-size-xs); line-height: 1.5; }
+.decision-action > strong { font-size: 24px; }
+.decision-action.positive > strong, .decision-prices > strong:first-of-type { color: var(--accent); }
+.decision-action.negative > strong, .decision-prices > strong:nth-of-type(2), .decision-invalid > strong { color: var(--danger); }
+.decision-action.caution > strong { color: var(--warning); }
+.decision-sizing { background: var(--accent-soft); }
+.decision-sizing.is-waiting, .decision-sizing.is-pending { background: var(--surface-raised); }
 .stock-trade-plan { display: grid; grid-template-columns: .8fr 1.1fr 1.1fr 1fr; background: var(--surface); border-bottom: 1px solid var(--border); }
 .stock-trade-plan article { position: relative; min-width: 0; padding: 18px 20px; border-right: 1px solid var(--border); }
 .stock-trade-plan article:last-child { border-right: 0; }
@@ -1452,6 +1466,10 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .analysis-metrics { grid-template-columns: 1fr 1fr; }
   .stock-decision-summary { grid-template-columns: 1fr; }
   .stock-trade-plan { grid-template-columns: 1fr 1fr; }
+  .stock-decision-essentials { grid-template-columns: 1fr 1fr; }
+  .decision-essential { border-bottom: 1px solid var(--border); }
+  .decision-essential:nth-child(2n) { border-right: 0; }
+  .decision-essential:last-child { grid-column: 1 / -1; border-bottom: 0; }
   .stock-trade-plan article:nth-child(2n) { border-right: 0; }
   .stock-trade-plan article:nth-child(-n + 2) { border-bottom: 1px solid var(--border); }
   .stock-decision-summary > article { border-right: 0; border-bottom: 1px solid var(--border); }
@@ -1483,6 +1501,9 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
   .stock-decision-heading { flex-direction: column; gap: 12px; }
   .holding-period-heading { flex-direction: column; gap: 12px; }
   .stock-trade-plan { grid-template-columns: 1fr; }
+  .stock-decision-essentials { grid-template-columns: 1fr; }
+  .decision-essential, .decision-essential:nth-child(2n) { grid-column: auto; padding: 16px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .decision-essential:last-child { border-bottom: 0; }
   .stock-trade-plan article, .stock-trade-plan article:nth-child(2n) { border-right: 0; border-bottom: 1px solid var(--border); }
   .stock-trade-plan article:last-child { border-bottom: 0; }
   .stock-position-plan { grid-template-columns: 1fr; gap: 8px; padding: 16px; }

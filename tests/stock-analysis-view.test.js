@@ -305,6 +305,10 @@ test("single stock analysis renders unified time controls and all technical evid
   assert.match(html, /参考买入价/);
   assert.match(html, /参考卖出价/);
   assert.match(html, /预期区间回报/);
+  assert.ok(html.indexOf("01 · 行动") < html.indexOf("02 · 买卖区间"));
+  assert.ok(html.indexOf("02 · 买卖区间") < html.indexOf("03 · 买多少"));
+  assert.ok(html.indexOf("03 · 买多少") < html.indexOf("04 · 等待条件"));
+  assert.ok(html.indexOf("04 · 等待条件") < html.indexOf("05 · 失效位"));
   assert.ok(html.indexOf("个股决策卡") < html.indexOf("计划持有多久"));
   assert.ok(html.indexOf("个股决策卡") < html.indexOf("基金经理方法论"));
   assert.match(html, /<details class="stock-manager-lens-details">/);
@@ -441,4 +445,5 @@ test("position sizing never presents zero shares as an executable order", () => 
 
   assert.match(html, /低于最小交易单位/);
   assert.match(html, /不会用“0股”伪装成可执行计划/);
+  assert.doesNotMatch(html, />0 股</);
 });

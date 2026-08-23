@@ -4,6 +4,7 @@ import { dirname, resolve } from "node:path";
 
 import { buildStockDecision } from "../signals/stock-analysis/decision.js";
 import { candidatesFromPrescreen, summarizeDecisionRows } from "./scanner-pipeline.mjs";
+import { resolvePythonExecutable } from "./python-runtime.mjs";
 
 const baseUrl = process.env.QUANT_DESK_URL || "http://127.0.0.1:5173";
 const argv = process.argv.slice(2);
@@ -24,13 +25,6 @@ const concurrency = Number.parseInt(option("--concurrency", "4"), 10);
 const prescreenFile = resolve(option("--prescreen-file", "output/scanner/prescreen-latest.json"));
 const decisionFile = resolve(option("--output", "output/scanner/decisions-latest.json"));
 
-function pythonExecutable() {
-  const virtual = process.platform === "win32"
-    ? resolve(".venv", "Scripts", "python.exe")
-    : resolve(".venv", "bin", "python");
-  return existsSync(virtual) ? virtual : process.platform === "win32" ? "python" : "python3";
-}
-
 function runPrescreen() {
   const args = [
     "scripts/prescreen-market.py",
@@ -41,7 +35,9 @@ function runPrescreen() {
   if (maxSymbols > 0) args.push("--max-symbols", String(maxSymbols));
   if (flag("--fresh")) args.push("--fresh");
   if (flag("--refresh-universe")) args.push("--refresh-universe");
-  const result = spawnSync(pythonExecutable(), args, { cwd: process.cwd(), stdio: "inherit", windowsHide: true });
+  const executable = resolvePythonExecutable();
+  if (!executable) throw new Error("No working Python interpreter was found. Re-run setup or set QUANT_DESK_PYTHON.");
+  const result = spawnSync(executable, args, { cwd: process.cwd(), stdio: "inherit", windowsHide: true });
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error(`第一层扫描失败（退出码 ${result.status ?? "unknown"}）`);
 }

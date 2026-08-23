@@ -1,18 +1,17 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolvePythonExecutable } from "./scripts/python-runtime.mjs";
 
-const virtualPython = process.platform === "win32"
-  ? resolve(".venv", "Scripts", "python.exe")
-  : resolve(".venv", "bin", "python");
-const executable = existsSync(virtualPython)
-  ? virtualPython
-  : process.platform === "win32" ? "python" : "python3";
+const executable = resolvePythonExecutable();
 const args = process.argv.slice(2);
 
 if (!args.length) {
   console.error("Usage: node run-python.mjs <python arguments>");
   process.exit(2);
+}
+
+if (!executable) {
+  console.error("No working Python interpreter was found. Re-run setup-windows.cmd, activate a valid .venv, or set QUANT_DESK_PYTHON to a Python 3 executable.");
+  process.exit(1);
 }
 
 const child = spawn(executable, args, {
