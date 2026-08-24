@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
+import shutil
 import statistics
+import subprocess
 import threading
 import time
 from pathlib import Path
@@ -40,11 +43,53 @@ from time_ranges import validate_signal_range
 
 SEARCH_LIMIT = 10
 SCANNER_RESULT_PATH = Path(__file__).resolve().parent / "output" / "scanner" / "decisions-latest.json"
+SCANNER_JOB_LOG_PATH = SCANNER_RESULT_PATH.parent / "scan-job.log"
+_SCANNER_JOB_LOCK = threading.Lock()
+_SCANNER_JOB: dict = {"status": "idle", "startedAt": None, "finishedAt": None, "error": None}
 BAOSTOCK_LOCK = threading.Lock()
 STOCK_ANALYSIS_CACHE_TTL_SECONDS = 5 * 60
 STOCK_ANALYSIS_CACHE_MAX_ENTRIES = 150
 _STOCK_ANALYSIS_CACHE: dict[tuple[str, str, str], tuple[float, dict]] = {}
 _STOCK_ANALYSIS_CACHE_LOCK = threading.Lock()
+
+
+def _scanner_job_snapshot() -> dict:
+    with _SCANNER_JOB_LOCK:
+        return dict(_SCANNER_JOB)
+
+
+def _finish_scanner_job(process: subprocess.Popen) -> None:
+    exit_code = process.wait()
+    with _SCANNER_JOB_LOCK:
+        _SCANNER_JOB.update({
+            "status": "ready" if exit_code == 0 and SCANNER_RESULT_PATH.is_file() else "failed",
+            "finishedAt": datetime.now(timezone.utc).isoformat(),
+            "error": None if exit_code == 0 else "真实行情扫描未完成，请检查网络与数据源状态",
+        })
+
+
+def start_scanner_job() -> dict:
+    with _SCANNER_JOB_LOCK:
+        if _SCANNER_JOB["status"] == "scanning":
+            return dict(_SCANNER_JOB)
+        node = shutil.which("node")
+        if not node:
+            raise RuntimeError("未找到 Node.js，无法启动市场扫描")
+        SCANNER_RESULT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        log = SCANNER_JOB_LOG_PATH.open("w", encoding="utf-8")
+        env = {**os.environ, "QUANT_DESK_URL": "http://127.0.0.1:8000"}
+        process = subprocess.Popen(
+            [node, "scripts/scan-stock-decisions.mjs", "--max-symbols", "80", "--deep-limit", "8", "--fresh"],
+            cwd=Path(__file__).resolve().parent,
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        log.close()
+        _SCANNER_JOB.update({"status": "scanning", "startedAt": datetime.now(timezone.utc).isoformat(), "finishedAt": None, "error": None})
+    threading.Thread(target=_finish_scanner_job, args=(process,), daemon=True).start()
+    return _scanner_job_snapshot()
 YAHOO_SYMBOL_PATTERN = re.compile(r"^[A-Za-z0-9.^=-]{1,20}(?:\.(?:SS|SZ|BJ))?$")
 US_EXACT_SYMBOL_PATTERN = re.compile(r"^[A-Za-z]{1,5}(?:[.-][A-Za-z]{1,2})?$")
 SUPPORTED_US_EXCHANGES = {"NMS", "NYQ", "NGM", "NCM", "ASE", "BTS", "PCX", "PNK", "OQX", "OEM"}
@@ -682,8 +727,12 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 self.send_json(200, {"data": get_data_source_center()})
                 return
             if parsed.path == "/api/scanner-results":
+                job = _scanner_job_snapshot()
+                if job["status"] == "scanning":
+                    self.send_json(200, {"data": {**job, "rows": []}})
+                    return
                 if not SCANNER_RESULT_PATH.is_file():
-                    self.send_json(200, {"data": {"status": "unavailable", "reason": "尚未生成全市场扫描结果", "rows": []}})
+                    self.send_json(200, {"data": {**job, "status": "failed" if job["status"] == "failed" else "unavailable", "reason": job.get("error") or "尚未生成真实市场扫描结果", "rows": []}})
                     return
                 payload = json.loads(SCANNER_RESULT_PATH.read_text(encoding="utf-8"))
                 if payload.get("schemaVersion") != 1 or not isinstance(payload.get("rows"), list):
@@ -708,7 +757,7 @@ class MarketDataHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:
         parsed = urlparse(self.path)
         try:
-            if parsed.path not in {"/api/data-sources/check", "/api/news-credentials", "/api/broker-accounts/snapshot", "/api/broker-accounts/quotes"}:
+            if parsed.path not in {"/api/data-sources/check", "/api/news-credentials", "/api/broker-accounts/snapshot", "/api/broker-accounts/quotes", "/api/scanner-results/refresh"}:
                 self.send_error_json(404, "NOT_FOUND", "接口不存在")
                 return
             content_type = self.headers.get("Content-Type", "").split(";", 1)[0].strip().lower()
@@ -727,7 +776,9 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 origin = self.headers.get("Origin", "").strip()
                 if origin and origin not in {"http://127.0.0.1:5173", "http://localhost:5173"}:
                     raise ValueError("本机敏感配置接口只接受本机应用请求")
-            if parsed.path == "/api/broker-accounts/snapshot":
+            if parsed.path == "/api/scanner-results/refresh":
+                data = start_scanner_job()
+            elif parsed.path == "/api/broker-accounts/snapshot":
                 data = read_broker_snapshot(payload.get("sourceId", ""), payload.get("config", {}))
             elif parsed.path == "/api/broker-accounts/quotes":
                 if str(payload.get("sourceId") or "").strip().lower() != "ibkr":

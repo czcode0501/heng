@@ -22,6 +22,37 @@ export function buildManagerOpportunityModel(payload, managerId) {
   return { manager, lens, generatedAt: payload?.generatedAt || null, scanDate: payload?.scanDate || null, ageHours, stale: ageHours == null || ageHours > 36, rows: ranked };
 }
 
+export function stabilizeManagerOpportunityModel(model, previous = null) {
+  if (!model.generatedAt || !model.rows.length) return { ...model, stabilitySnapshot: previous };
+  if (previous?.managerId === model.manager.id && previous?.generatedAt === model.generatedAt) {
+    return { ...model, rows: previous.rows, stabilitySnapshot: previous };
+  }
+  const priorRows = new Map(previous?.managerId === model.manager.id ? (previous.rows || []).map((row) => [row.symbol, row]) : []);
+  const seen = new Set();
+  const rows = model.rows.map((row) => {
+    seen.add(row.symbol);
+    const prior = priorRows.get(row.symbol);
+    const sameSignal = prior?.rawAction === row.action;
+    const confirmations = prior ? (sameSignal ? Number(prior.confirmations || 1) + 1 : 1) : 1;
+    const hardRisk = ["卖出/减仓", "退出"].includes(row.action) || /conflict|risk|break|stop/i.test(row.code || "");
+    const confirmed = hardRisk || confirmations >= 2;
+    return {
+      ...row,
+      rawAction: row.action,
+      acceptedAction: confirmed ? row.action : prior?.acceptedAction || "观察中",
+      action: confirmed ? row.action : prior?.acceptedAction || "观察中",
+      confirmations,
+      stabilityState: hardRisk ? "risk-immediate" : confirmed ? "confirmed" : prior ? "change-pending" : "new-pending",
+    };
+  });
+  for (const prior of priorRows.values()) {
+    if (seen.has(prior.symbol) || prior.stabilityState === "removal-pending") continue;
+    rows.push({ ...prior, stabilityState: "removal-pending", label: "本轮未进入候选，等待下一次独立扫描确认后移除" });
+  }
+  const snapshot = { managerId: model.manager.id, generatedAt: model.generatedAt, rows };
+  return { ...model, rows, stabilitySnapshot: snapshot };
+}
+
 export function renderManagerFirstStep(managerId) {
   const selected = resolvePortfolioManager(managerId);
   const cards = PORTFOLIO_MANAGERS.map((manager) => {
@@ -35,8 +66,9 @@ export function renderManagerFirstStep(managerId) {
 
 export function renderManagerOpportunities(model, state = "ready") {
   const title = `${model.manager.methodName}方法 · 当前市场研究候选`;
-  if (state === "loading") return `<div class="opportunity-heading"><div><p class="eyebrow">STEP 2 · MARKET SCAN</p><h2>正在读取市场扫描</h2></div></div><p class="opportunity-empty">正在检查最近一次全市场扫描结果…</p>`;
-  if (state === "unavailable" || !model.generatedAt) return `<div class="opportunity-heading"><div><p class="eyebrow">STEP 2 · MARKET SCAN</p><h2>${escapeHtml(title)}</h2><p>当前没有可验证的全市场扫描结果，因此不生成假名单。</p></div><span class="opportunity-state is-missing">待扫描</span></div><div class="opportunity-empty"><strong>先生成一次真实扫描</strong><p>运行 <code>npm run scan:market</code>。完成后刷新本页，系统会按当前方法重新排序。</p></div>`;
-  const cards = model.rows.map((row, index) => `<article class="opportunity-card"><header><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(row.name || row.symbol)}</strong><small>${escapeHtml(row.symbol)} · ${escapeHtml(row.market === "CN" ? "A股" : "美股")} · ${escapeHtml(row.sector || "行业待识别")}</small></div><em>${escapeHtml(row.action || "研究")}</em></header><p>${row.preferred ? `符合${escapeHtml(model.manager.methodName)}优先研究行业；` : "不属于该方法优先行业；"}${escapeHtml(row.label || "需继续核验公司事实与风险边界")}</p><dl><div><dt>扫描分</dt><dd>${finite(row.score).toFixed(1)}</dd></div><div><dt>参考买入</dt><dd>${row.entry == null ? "待形成" : finite(row.entry).toFixed(2)}</dd></div><div><dt>失效位</dt><dd>${row.invalidation == null ? "待形成" : finite(row.invalidation).toFixed(2)}</dd></div></dl><button class="text-link" type="button" data-opportunity-symbol="${escapeHtml(row.providerSymbol || row.symbol)}" data-opportunity-name="${escapeHtml(row.name || row.symbol)}" data-opportunity-market="${escapeHtml(row.market || "")}">查看完整分析 →</button></article>`).join("");
-  return `<div class="opportunity-heading"><div><p class="eyebrow">STEP 2 · MARKET SCAN</p><h2>${escapeHtml(title)}</h2><p>${escapeHtml(model.lens.signature)}。候选先经过真实全市场初筛，再按方法偏好重排。</p></div><span class="opportunity-state ${model.stale ? "is-stale" : "is-fresh"}">${model.stale ? "扫描已过期" : "扫描可用"}</span></div>${cards ? `<div class="opportunity-grid">${cards}</div>` : '<p class="opportunity-empty">扫描完成，但没有满足当前研究条件的候选。</p>'}<footer class="opportunity-boundary">扫描日期 ${escapeHtml(model.scanDate || "待确认")} · ${model.rows.length} 项研究候选。候选不等于买入建议，仍需打开个股完成公司事实与证据闸门。</footer>`;
+  if (state === "loading" || state === "scanning") return `<div class="opportunity-heading"><div><p class="eyebrow">STEP 2 · MARKET SCAN</p><h2>正在生成真实市场候选</h2><p>快速扫描正在读取真实行情并完成两层筛选，通常需要数分钟。</p></div><span class="opportunity-state">扫描中</span></div><p class="opportunity-empty">页面会自动检查进度；可以继续使用其他功能。</p>`;
+  if (["unavailable", "failed"].includes(state) || !model.generatedAt) return `<div class="opportunity-heading"><div><p class="eyebrow">STEP 2 · MARKET SCAN</p><h2>${escapeHtml(title)}</h2><p>当前没有可验证的扫描结果，因此不生成假名单。</p></div><span class="opportunity-state is-missing">待扫描</span></div><div class="opportunity-empty"><strong>${state === "failed" ? "上次扫描未完成" : "生成第一份真实市场候选"}</strong><p>${state === "failed" ? "请确认本机网络和免费行情源可用后重试。" : "首次会进行快速真实样本扫描；结果会标明生成时间与稳定状态。"}</p><button type="button" class="primary-button" data-start-market-scan>开始真实快速扫描</button></div>`;
+  const stabilityLabels = { confirmed: "连续两次确认", "change-pending": "变化待确认", "new-pending": "新候选观察", "removal-pending": "移除待确认", "risk-immediate": "硬风险立即生效" };
+  const cards = model.rows.map((row, index) => `<article class="opportunity-card" data-stability="${escapeHtml(row.stabilityState || "confirmed")}"><header><span>${String(index + 1).padStart(2, "0")}</span><div><strong>${escapeHtml(row.name || row.symbol)}</strong><small>${escapeHtml(row.symbol)} · ${escapeHtml(row.market === "CN" ? "A股" : "美股")} · ${escapeHtml(row.sector || "行业待识别")}</small></div><em>${escapeHtml(row.action || "研究")}</em></header><small class="opportunity-stability">${escapeHtml(stabilityLabels[row.stabilityState] || "已确认")}</small><p>${row.preferred ? `符合${escapeHtml(model.manager.methodName)}优先研究行业；` : "不属于该方法优先行业；"}${escapeHtml(row.label || "需继续核验公司事实与风险边界")}</p><dl><div><dt>扫描分</dt><dd>${finite(row.score).toFixed(1)}</dd></div><div><dt>参考买入</dt><dd>${row.entry == null ? "待形成" : finite(row.entry).toFixed(2)}</dd></div><div><dt>失效位</dt><dd>${row.invalidation == null ? "待形成" : finite(row.invalidation).toFixed(2)}</dd></div></dl><button class="text-link" type="button" data-opportunity-symbol="${escapeHtml(row.providerSymbol || row.symbol)}" data-opportunity-name="${escapeHtml(row.name || row.symbol)}" data-opportunity-market="${escapeHtml(row.market || "")}">查看完整分析 →</button></article>`).join("");
+  return `<div class="opportunity-heading"><div><p class="eyebrow">STEP 2 · MARKET SCAN</p><h2>${escapeHtml(title)}</h2><p>${escapeHtml(model.lens.signature)}。投资方法由你锁定；短期数据只改变观察信号，不会自动替你切换方法。</p></div><span class="opportunity-state ${model.stale ? "is-stale" : "is-fresh"}">${model.stale ? "扫描已过期" : "扫描可用"}</span></div><aside class="opportunity-stability-policy"><strong>双扫描确认机制</strong><span>新候选、动作改变和移出名单需连续两次独立扫描确认；数据冲突、失效位破坏等硬风险立即生效。</span><button type="button" class="text-link" data-start-market-scan>重新扫描</button></aside>${cards ? `<div class="opportunity-grid">${cards}</div>` : '<p class="opportunity-empty">扫描完成，但没有满足当前研究条件的候选。</p>'}<footer class="opportunity-boundary">扫描日期 ${escapeHtml(model.scanDate || "待确认")} · ${model.rows.length} 项研究候选。候选不等于买入建议，仍需打开个股完成公司事实与证据闸门。</footer>`;
 }

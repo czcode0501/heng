@@ -97,7 +97,7 @@ import {
   renderAnalysisProfileStrip,
 } from "./portfolio-analysis-profile.js";
 import { preferBrokerQuote } from "./broker-quote-priority.js";
-import { buildManagerOpportunityModel, renderManagerFirstStep, renderManagerOpportunities } from "./market-opportunities.js";
+import { buildManagerOpportunityModel, renderManagerFirstStep, renderManagerOpportunities, stabilizeManagerOpportunityModel } from "./market-opportunities.js";
 
 const BROKER_PORTFOLIO_ID = "broker-real";
 
@@ -188,6 +188,11 @@ let brokerAutoSelected = Boolean(cachedIbkrSnapshot);
 let lastBrokerConnectionError = "";
 let latestScannerPayload = null;
 let scannerResultsRequested = false;
+let scannerPollTimer = null;
+const OPPORTUNITY_STABILITY_KEY = "hengce-opportunity-stability-v1";
+let opportunityStability = (() => {
+  try { return JSON.parse(window.localStorage.getItem(OPPORTUNITY_STABILITY_KEY) || "{}"); } catch { return {}; }
+})();
 if (cachedIbkrSnapshot) activePortfolioId = BROKER_PORTFOLIO_ID;
 let pendingPositionStock = null;
 let signalTimeRange = "1m";
@@ -729,16 +734,23 @@ function renderActivePortfolio() {
 
 function renderMarketOpportunities(portfolio = activeCustomPortfolio()) {
   if (!portfolio || !elements.marketOpportunityPanel) return;
-  const model = buildManagerOpportunityModel(latestScannerPayload, portfolio.managerId);
-  const state = latestScannerPayload?.status === "loading" || (!scannerResultsRequested && latestScannerPayload == null) ? "loading" : latestScannerPayload?.status === "ready" ? "ready" : "unavailable";
+  const rawModel = buildManagerOpportunityModel(latestScannerPayload, portfolio.managerId);
+  const model = stabilizeManagerOpportunityModel(rawModel, opportunityStability[portfolio.managerId]);
+  if (model.stabilitySnapshot && model.generatedAt) {
+    opportunityStability[portfolio.managerId] = model.stabilitySnapshot;
+    window.localStorage.setItem(OPPORTUNITY_STABILITY_KEY, JSON.stringify(opportunityStability));
+  }
+  const state = latestScannerPayload?.status === "loading" || (!scannerResultsRequested && latestScannerPayload == null) ? "loading" : latestScannerPayload?.status || "unavailable";
   elements.marketOpportunityPanel.innerHTML = renderManagerOpportunities(model, state);
 }
 
-async function loadScannerResults() {
-  if (scannerResultsRequested) return;
+async function loadScannerResults(force = false) {
+  if (scannerResultsRequested && !force) return;
   scannerResultsRequested = true;
-  latestScannerPayload = { status: "loading", rows: [] };
-  renderMarketOpportunities();
+  if (!force) {
+    latestScannerPayload = { status: "loading", rows: [] };
+    renderMarketOpportunities();
+  }
   try {
     const response = await fetch("/api/scanner-results", { headers: { Accept: "application/json" } });
     const payload = await response.json();
@@ -747,6 +759,32 @@ async function loadScannerResults() {
     latestScannerPayload = { status: "unavailable", rows: [] };
   }
   renderMarketOpportunities();
+  if (latestScannerPayload?.status === "scanning") {
+    window.clearTimeout(scannerPollTimer);
+    scannerPollTimer = window.setTimeout(() => loadScannerResults(true), 4_000);
+  }
+}
+
+async function startMarketScan() {
+  latestScannerPayload = { status: "scanning", rows: [] };
+  renderMarketOpportunities();
+  try {
+    const response = await fetch("/api/scanner-results/refresh", {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: "{}",
+    });
+    const payload = await response.json();
+    if (!response.ok) throw new Error(payload?.error?.message || "无法启动扫描");
+    latestScannerPayload = { ...payload.data, rows: [] };
+    renderMarketOpportunities();
+    window.clearTimeout(scannerPollTimer);
+    scannerPollTimer = window.setTimeout(() => loadScannerResults(true), 1_500);
+  } catch (error) {
+    latestScannerPayload = { status: "failed", reason: error.message, rows: [] };
+    renderMarketOpportunities();
+    showToast(error.message || "市场扫描启动失败");
+  }
 }
 
 function renderBrokerAccountOverview() {
@@ -2035,6 +2073,10 @@ elements.managerFirstPanel.addEventListener("click", (event) => {
 });
 
 elements.marketOpportunityPanel.addEventListener("click", (event) => {
+  if (event.target.closest("[data-start-market-scan]")) {
+    startMarketScan();
+    return;
+  }
   const button = event.target.closest("[data-opportunity-symbol]");
   if (!button) return;
   const providerSymbol = button.dataset.opportunitySymbol;

@@ -1,0 +1,7 @@
+interface:
+  display_name: "衡策资深产品开发负责人"
+  short_description: "产品规划、核心架构、交付拆解与质量把关"
+  default_prompt: "使用 $hengce-product-development-lead 帮我判断衡策下一步最值得做什么，并给出最小版本、架构落点和验收标准。"
+
+policy:
+  allow_implicit_invocation: true
