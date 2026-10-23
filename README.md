@@ -31,6 +31,17 @@
 
 市场择时使用收盘日线，属于自动更新的 EOD 数据，不是交易所实时行情。
 
+### 美股行情优先使用 IBKR
+
+本机已登录 TWS 或 IB Gateway 并开启 API Socket 时，美股与美国指数（`^GSPC`、`^NDX`、`^VIX`）的报价、日线和日内K线自动改由 IBKR 读取：持仓报价、个股分析、市场择时、板块轮动、资金流、投资者情绪和微观数据都会切换，页面与 API 的 `source` 字段显示实际来源（`IBKR TWS`）。
+
+- 连接只读：只请求历史K线，不下单，只允许本机回环地址；建议在 TWS 的 API 设置中保持勾选“只读 API”。
+- 端口默认依次尝试 7496、7497、4001、4002，可用 `IBKR_PORT` 固定；行情连接使用 Client ID 77（`IBKR_MARKET_DATA_CLIENT_ID` 可改），被占用时自动尝试后续编号。
+- TWS 未运行或单个代码没有权限时，该代码自动回退 yfinance，并标注“IBKR TWS + Yahoo Finance 回退”或“Yahoo Finance”；连接失败后 60 秒内不重复尝试。
+- A股、全市场扫描初筛和宏观数据仍使用原有免费源。
+- 需要 IBKR 官方 TWS API Python 包：安装 TWS API 后执行 `pip install <TWS API 安装目录>/source/pythonclient`。
+- IBKR 日线成交量口径与 Yahoo 综合成交量不同（实测约为其 50%–90%），价格一致；成交量类指标按同一序列内的相对变化计算，绝对成交额展示会偏小。
+
 ## 数据源中心
 
 打开 <http://127.0.0.1:5173/#data-sources> 可以查看六类数据源/账户通道：

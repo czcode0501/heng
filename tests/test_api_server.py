@@ -4,11 +4,13 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from api_server import (
+    _fetch_stock_analysis,
     _with_stock_analysis_cache,
     baostock_code_to_yahoo,
     build_quote_from_rows,
     build_stock_analysis_from_rows,
     calculate_technical_snapshot,
+    get_quotes,
     normalize_baostock_row,
     normalize_sector_id,
     normalize_yahoo_quote,
@@ -18,6 +20,7 @@ from api_server import (
     validate_market_timing_range,
     validate_search_query,
 )
+from ibkr_market_data import IbkrUnavailable
 
 
 class SearchContractTests(unittest.TestCase):
@@ -222,3 +225,63 @@ class SearchContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def analysis_rows(count=120):
+    start = date(2026, 4, 1)
+    return [
+        {
+            "time": (start + timedelta(days=index)).isoformat(),
+            "date": (start + timedelta(days=index)).isoformat(),
+            "open": 100 + index * 0.5,
+            "high": 101 + index * 0.5,
+            "low": 99 + index * 0.5,
+            "close": 100 + index * 0.5,
+            "volume": 1_000_000,
+        }
+        for index in range(count)
+    ]
+
+
+class IbkrMarketDataRoutingTests(unittest.TestCase):
+    def test_us_stock_analysis_prefers_ibkr_bars(self):
+        with (
+            patch("api_server.fetch_ibkr_bars", return_value=analysis_rows()) as ibkr,
+            patch("api_server._fetch_yfinance_analysis_rows") as yahoo,
+        ):
+            result = _fetch_stock_analysis("AAPL", "3m")
+
+        self.assertEqual(result["source"], "IBKR TWS")
+        self.assertEqual(result["currency"], "USD")
+        self.assertEqual(ibkr.call_args.kwargs["interval"], "1d")
+        yahoo.assert_not_called()
+
+    def test_stock_analysis_falls_back_to_yahoo_when_ibkr_is_unavailable(self):
+        with (
+            patch("api_server.fetch_ibkr_bars", side_effect=IbkrUnavailable("TWS not running")),
+            patch("api_server._fetch_yfinance_analysis_rows", return_value=(analysis_rows(), "USD")) as yahoo,
+        ):
+            result = _fetch_stock_analysis("AAPL", "3m")
+
+        self.assertEqual(result["source"], "Yahoo Finance")
+        yahoo.assert_called_once()
+
+    def test_a_share_analysis_never_asks_ibkr(self):
+        with (
+            patch("api_server.fetch_ibkr_bars") as ibkr,
+            patch("api_server._fetch_yfinance_analysis_rows", return_value=(analysis_rows(), "CNY")),
+        ):
+            result = _fetch_stock_analysis("600519.SS", "3m")
+
+        ibkr.assert_not_called()
+        self.assertEqual(result["currency"], "CNY")
+
+    def test_quotes_are_labelled_with_the_provider_that_supplied_them(self):
+        latest = {"AAPL": analysis_rows(3), "600519.SS": analysis_rows(3)}
+        with (
+            patch("api_server.get_yfinance_latest_series", return_value=latest),
+            patch("api_server.series_sources", return_value={"AAPL": "ibkr", "600519.SS": "yfinance"}),
+        ):
+            quotes = get_quotes(["AAPL", "600519.SS"])
+
+        self.assertEqual([quote["source"] for quote in quotes], ["IBKR TWS", "Yahoo Finance via yfinance"])

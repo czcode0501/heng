@@ -74,16 +74,38 @@ function renderSourceCards(statuses, selectedSource) {
   }).join("");
 }
 
+export function describeMarketRouting(marketId, routing = {}) {
+  if (marketId !== "united-states") {
+    return { sourceId: "free", label: "免费延迟模式", detail: "BaoStock 与公开行情 · 无需账户或 Key", message: "" };
+  }
+  if (routing.sourceId === "ibkr") {
+    return {
+      sourceId: "ibkr",
+      label: "IBKR TWS 行情",
+      detail: `本机 TWS 只读 · 端口 ${routing.port ?? "--"} · 单个代码失败时回退免费源`,
+      message: routing.message || "",
+    };
+  }
+  return {
+    sourceId: "free",
+    label: "免费延迟模式（IBKR 未连接）",
+    detail: "登录 TWS 并开启 API Socket 后自动切换到 IBKR",
+    message: routing.message || "",
+  };
+}
+
 function renderRoutingMarket(marketId, title, preferences, statuses) {
   const options = dataSourceOptionsForMarket(marketId);
   const planned = options.filter(({ availability }) => availability === "planned").map(({ name }) => name).join("、");
+  const route = describeMarketRouting(marketId, statuses.routing?.[marketId]);
   return `<fieldset class="data-routing-market market-${marketId === "china" ? "cn" : "us"}">
     <legend><span>${marketId === "china" ? "CN" : "US"}</span>${escapeHtml(title)}</legend>
     <div class="data-routing-options"><label class="data-routing-option">
-      <input type="radio" name="routing-${marketId}" value="free" data-source-routing="${marketId}" checked>
-      <span><strong>免费延迟模式</strong><small>当前唯一启用来源 · 无需账户或 Key</small></span>
+      <input type="radio" name="routing-${marketId}" value="${route.sourceId}" data-source-routing="${marketId}" checked>
+      <span><strong>${escapeHtml(route.label)}</strong><small>${escapeHtml(route.detail)}</small></span>
     </label></div>
-    <p class="data-routing-roadmap">后续开放：${escapeHtml(planned)}</p>
+    ${route.message ? `<p class="data-routing-status">${escapeHtml(route.message)}</p>` : ""}
+    ${planned ? `<p class="data-routing-roadmap">后续开放：${escapeHtml(planned)}</p>` : ""}
   </fieldset>`;
 }
 
@@ -160,8 +182,8 @@ export function renderDataSourceCenter({ preferences, statuses = {}, selectedSou
   const status = statusFor(selected, statuses);
   const serviceStatus = statuses.service || { state: "pending", message: "等待本地数据服务健康检查。" };
   return `<header class="workspace-intro data-source-intro">
-    <div><p class="eyebrow">数据与账户连接</p><h2>数据源中心</h2><p>行情默认继续使用免费延迟数据；IBKR与QMT只读取账户持仓，不会下单。</p></div>
-    <span class="structure-status">当前阶段：免费延迟数据 + 券商只读持仓</span>
+    <div><p class="eyebrow">数据与账户连接</p><h2>数据源中心</h2><p>美股行情优先读取本机 IBKR TWS；IBKR与QMT只读取行情和持仓，不会下单。</p></div>
+    <span class="structure-status">${statuses.routing?.["united-states"]?.sourceId === "ibkr" ? "当前阶段：美股 IBKR 实时行情 + 券商只读持仓" : "当前阶段：免费延迟数据（IBKR 未连接）+ 券商只读持仓"}</span>
   </header>
   <section class="data-service-health" aria-label="数据服务持续健康状态">
     <div><p class="eyebrow">CONTINUOUS HEALTH</p><h3>持续健康检查</h3></div>
@@ -179,7 +201,7 @@ export function renderDataSourceCenter({ preferences, statuses = {}, selectedSou
     <div class="data-source-grid">${renderSourceCards(statuses, selected)}</div>
   </section>
   <section class="data-routing" aria-labelledby="data-routing-title">
-    <div class="data-source-section-heading"><div><p class="eyebrow">ACTIVE ROUTING</p><h3 id="data-routing-title">当前中美市场路由</h3></div><p>当前版本固定使用免费延迟模式，避免未完成的连接选项造成误解。</p></div>
+    <div class="data-source-section-heading"><div><p class="eyebrow">ACTIVE ROUTING</p><h3 id="data-routing-title">当前中美市场路由</h3></div><p>美股行情优先使用本机 IBKR TWS，未连接时自动回退免费延迟数据；A股继续使用免费数据。</p></div>
     <div class="data-routing-grid">${renderRoutingMarket("china", "中国市场", preferences, statuses)}${renderRoutingMarket("united-states", "美国市场", preferences, statuses)}</div>
     <div class="free-fallback-note"><span aria-hidden="true">✓</span><div><strong>免费延迟模式已锁定</strong><p>数据暂时失败时显示最后更新时间和不可用状态，不用虚构数字补位，也不把估算订单流写成真实订单流。</p></div></div>
   </section>

@@ -1,8 +1,12 @@
 import unittest
 from unittest.mock import patch
 
+from ibkr_market_data import IbkrUnavailable
 from market_data_hub import (
     baostock_to_yahoo_symbol,
+    describe_us_source,
+    get_yfinance_latest_series,
+    series_sources,
     get_yfinance_series,
     merge_latest_rows,
     reset_market_data_hub_cache,
@@ -36,13 +40,48 @@ class MarketDataHubTests(unittest.TestCase):
             calls.append(list(symbols))
             return {symbol: rows(symbol) for symbol in symbols}
 
-        with patch("market_data_hub._fetch_yfinance_batch", side_effect=fake_batch):
+        with patch("market_data_hub._fetch_daily_batch", side_effect=fake_batch):
             first = get_yfinance_series(["SPY", "QQQ"], minimum=220)
             second = get_yfinance_series(["QQQ", "XLE"], minimum=121)
 
         self.assertEqual(calls, [["SPY", "QQQ"], ["XLE"]])
         self.assertEqual(set(first), {"SPY", "QQQ"})
         self.assertEqual(set(second), {"QQQ", "XLE"})
+
+    def test_us_symbols_use_ibkr_and_record_their_source(self):
+        yahoo_calls = []
+
+        def fake_ibkr(symbol, **kwargs):
+            if symbol == "HYG":
+                raise IbkrUnavailable("no permission")
+            return rows(symbol)
+
+        def fake_yahoo(symbols):
+            yahoo_calls.append(list(symbols))
+            return {symbol: rows(symbol) for symbol in symbols}
+
+        with (
+            patch("market_data_hub.fetch_ibkr_bars", side_effect=fake_ibkr),
+            patch("market_data_hub._fetch_yfinance_batch", side_effect=fake_yahoo),
+        ):
+            get_yfinance_series(["SPY", "HYG", "515880.SS"], minimum=121)
+
+        self.assertEqual(yahoo_calls, [["HYG", "515880.SS"]])
+        self.assertEqual(series_sources(["SPY", "HYG", "515880.SS"]), {"SPY": "ibkr", "HYG": "yfinance", "515880.SS": "yfinance"})
+        self.assertEqual(describe_us_source(["SPY"])["name"], "IBKR TWS")
+        self.assertEqual(describe_us_source(["SPY", "HYG"])["provider"], "ibkr+yfinance")
+        self.assertEqual(describe_us_source(["HYG"])["provider"], "yfinance")
+
+    def test_latest_quotes_fall_back_to_yfinance_when_tws_is_unavailable(self):
+        with (
+            patch("market_data_hub.fetch_ibkr_bars", side_effect=IbkrUnavailable("TWS not running")),
+            patch("market_data_hub._fetch_yfinance_latest_batch", return_value={"AAPL": rows("AAPL", 3)}) as yahoo,
+        ):
+            latest = get_yfinance_latest_series(["AAPL"])
+
+        yahoo.assert_called_once_with(["AAPL"])
+        self.assertEqual(len(latest["AAPL"]), 3)
+        self.assertEqual(series_sources(["AAPL"], latest=True), {"AAPL": "yfinance"})
 
     def test_signal_warmup_batches_each_provider_group_once(self):
         with (

@@ -10,7 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
-from market_data_hub import get_baostock_series, get_yfinance_series
+from market_data_hub import describe_us_source, get_baostock_series, get_yfinance_series
 from market_timing_sources import get_market_timing_dashboard
 from sector_rotation import build_sector_market
 
@@ -100,10 +100,7 @@ def fetch_us_sector_market(timing_score: float = 45, force: bool = False) -> dic
         bundle["SPY"],
         sectors,
         {
-            "name": "Yahoo Finance via yfinance",
-            "mode": "zero-config",
-            "access": "无需 API Key · 研究与个人使用",
-            "url": "https://ranaroussi.github.io/yfinance",
+            **describe_us_source(symbols),
             "notes": "使用11只Select Sector SPDR ETF作为GICS一级板块代理。",
         },
         timing_score=timing_score,

@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
-from market_data_hub import get_baostock_series, get_yfinance_series
+from market_data_hub import describe_us_source, get_baostock_series, get_yfinance_series
 from market_timing import build_china_market, build_us_market
 
 
@@ -138,15 +138,9 @@ def _fetch_us_yfinance(force: bool = False) -> dict[str, list[dict]]:
 
 
 def fetch_us_market(force: bool = False) -> dict:
-    source = {
-        "name": "Yahoo Finance via yfinance",
-        "provider": "yfinance",
-        "mode": "zero-config",
-        "access": "无需 API Key · 研究与个人使用",
-        "url": "https://ranaroussi.github.io/yfinance",
-        "isFallback": False,
-    }
-    return build_us_market(_fetch_us_yfinance(force=force), source)
+    series = _fetch_us_yfinance(force=force)
+    source = {**describe_us_source(US_SERIES.values()), "isFallback": False}
+    return build_us_market(series, source)
 
 
 def has_fresh_market_timing_dashboard(cache_path: Path | None = None) -> bool:

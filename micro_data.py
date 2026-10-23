@@ -14,6 +14,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta, timezone
 
+from ibkr_market_data import IbkrUnavailable, fetch_ibkr_bars, ibkr_contract_spec
 from technical_indicators import calculate_technical_indicators
 from time_ranges import validate_signal_range
 
@@ -555,6 +556,22 @@ def _fetch_yfinance(symbol: str, config: dict, start: date) -> list[dict]:
     return rows
 
 
+def _fetch_bars(symbol: str, config: dict, start: date) -> tuple[list[dict], str]:
+    """US symbols come from IBKR when TWS is available; everything else uses yfinance."""
+    if ibkr_contract_spec(symbol):
+        try:
+            bars = fetch_ibkr_bars(symbol, interval=config["interval"], start=start)
+        except IbkrUnavailable:
+            bars = None
+        if bars:
+            rows = [
+                _normalize_row(bar["time"], bar["open"], bar["high"], bar["low"], bar["close"], bar["volume"], bar["close"] * bar["volume"])
+                for bar in bars
+            ]
+            return rows, "ibkr"
+    return _fetch_yfinance(symbol, config, start), "yfinance"
+
+
 def _instrument_definition(market_id: str, instrument_id: str) -> dict:
     if market_id not in MICRO_INSTRUMENTS:
         raise ValueError("不支持的市场")
@@ -582,8 +599,9 @@ def _build_market(market_id: str, instrument_id: str, range_id: str, custom_star
     definition = _instrument_definition(market_id, instrument_id)
     config = _range_config(range_id, custom_start)
     start = _requested_start(config, custom_start)
-    price_rows = _fetch_yfinance(definition["priceSymbol"], config, start)
-    flow_rows = _fetch_yfinance(definition["flowSymbol"], config, start)
+    price_rows, price_source = _fetch_bars(definition["priceSymbol"], config, start)
+    flow_rows, flow_source = _fetch_bars(definition["flowSymbol"], config, start)
+    sources_used = {price_source, flow_source}
     rows = combine_index_price_with_flow(price_rows, flow_rows)
     visible_rows = _select_requested_window(rows, range_id, custom_start)
     if len(visible_rows) < 2:
@@ -610,9 +628,11 @@ def _build_market(market_id: str, instrument_id: str, range_id: str, custom_star
         "status": "live",
         "instrument": _public_instrument(definition),
         "source": {
-            "name": "Yahoo Finance 指数 + ETF成交代理",
-            "access": "无需 API Key",
-            "mode": "zero-config",
+            "name": "IBKR TWS 指数 + ETF成交" if sources_used == {"ibkr"}
+            else "IBKR TWS + Yahoo Finance 回退" if "ibkr" in sources_used
+            else "Yahoo Finance 指数 + ETF成交代理",
+            "access": "本机 TWS 只读行情" if "ibkr" in sources_used else "无需 API Key",
+            "mode": "broker-feed" if "ibkr" in sources_used else "zero-config",
             "price": definition["priceLabel"],
             "flow": definition["carrier"],
         },

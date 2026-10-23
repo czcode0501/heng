@@ -2120,6 +2120,7 @@ th { font-size: var(--font-size-xs); }
 .data-routing-option span, .data-routing-option strong, .data-routing-option small { display: block; }
 .data-routing-option strong { font-size: .875rem; }
 .data-routing-option small { margin-top: 4px; color: var(--muted); font-size: .75rem; }
+.data-routing-status { margin: 10px 0 0; color: var(--muted); font-size: .75rem; line-height: 1.5; }
 .data-routing-roadmap { margin: 12px 0 0; color: var(--subtle); font-size: .75rem; line-height: 1.5; }
 .free-fallback-note { display: flex; align-items: flex-start; gap: 12px; margin-top: 16px; padding: 16px; background: var(--accent-soft); border-left: 3px solid var(--accent); border-radius: var(--radius-sm); }
 .free-fallback-note > span { width: 28px; height: 28px; display: grid; flex: 0 0 auto; place-items: center; color: var(--accent); border: 1px solid var(--accent); border-radius: 50%; font-weight: 900; }

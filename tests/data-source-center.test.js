@@ -13,7 +13,7 @@ import {
   saveIbkrAutoSyncConfig,
   serializeDataSourcePreferences,
 } from "../data-sources/model.js";
-import { renderDataSourceCenter } from "../data-sources/view.js";
+import { describeMarketRouting, renderDataSourceCenter } from "../data-sources/view.js";
 
 test("data source catalog separates account connectors from market-data vendors", () => {
   assert.deepEqual(
@@ -202,4 +202,35 @@ test("the last successful IBKR snapshot survives a page reload in session storag
 test("IBKR session snapshot cache rejects malformed or non-IBKR data", () => {
   const storage = { getItem: () => JSON.stringify({ sourceId: "qmt", positions: [] }) };
   assert.equal(loadIbkrSnapshotCache(storage), null);
+});
+
+test("US routing shows IBKR when TWS is connected and the free fallback otherwise", () => {
+  const connected = describeMarketRouting("united-states", { sourceId: "ibkr", port: 7497, message: "美股行情使用本机 TWS" });
+  assert.equal(connected.sourceId, "ibkr");
+  assert.match(connected.label, /IBKR TWS/);
+  assert.match(connected.detail, /7497/);
+
+  const fallback = describeMarketRouting("united-states", { sourceId: "free", state: "fallback" });
+  assert.equal(fallback.sourceId, "free");
+  assert.match(fallback.label, /IBKR 未连接/);
+
+  assert.equal(describeMarketRouting("china", { sourceId: "ibkr" }).sourceId, "free");
+});
+
+test("data source center renders the live US route instead of a fixed free-only notice", () => {
+  const html = renderDataSourceCenter({
+    preferences: DEFAULT_DATA_SOURCE_PREFERENCES,
+    statuses: { routing: { "united-states": { sourceId: "ibkr", port: 7497, message: "美股行情使用本机 TWS（端口 7497）只读读取" } } },
+  });
+  assert.match(html, /<strong>IBKR TWS 行情<\/strong>/);
+  assert.match(html, /端口 7497/);
+  assert.doesNotMatch(html, /当前唯一启用来源/);
+  assert.doesNotMatch(html, /固定使用免费延迟模式/);
+});
+
+test("data source center stage badge follows the live US route", () => {
+  const connected = renderDataSourceCenter({ preferences: DEFAULT_DATA_SOURCE_PREFERENCES, statuses: { routing: { "united-states": { sourceId: "ibkr", port: 7497 } } } });
+  assert.match(connected, /当前阶段：美股 IBKR 实时行情/);
+  const offline = renderDataSourceCenter({ preferences: DEFAULT_DATA_SOURCE_PREFERENCES, statuses: {} });
+  assert.match(offline, /当前阶段：免费延迟数据（IBKR 未连接）/);
 });

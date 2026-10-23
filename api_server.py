@@ -25,7 +25,8 @@ from sector_constituents import SECTOR_CONSTITUENTS, SECTOR_TITLES, build_sector
 from macro_data import get_macro_dashboard
 from market_timing import apply_market_timing_range
 from market_timing_sources import get_market_timing_dashboard
-from market_data_hub import get_yfinance_latest_series
+from ibkr_market_data import IbkrUnavailable, fetch_ibkr_bars, ibkr_contract_spec
+from market_data_hub import get_yfinance_latest_series, series_sources
 from micro_data import (
     aggregate_candles,
     build_volume_profile,
@@ -358,7 +359,7 @@ def parse_quote_symbols(value: str) -> list[str]:
     return symbols
 
 
-def build_quote_from_rows(provider_symbol: str, rows: list[dict]) -> dict:
+def build_quote_from_rows(provider_symbol: str, rows: list[dict], source: str = "Yahoo Finance via yfinance") -> dict:
     ordered = sorted(
         (dict(row) for row in rows if isinstance(row, dict) and row.get("date") and row.get("close") is not None),
         key=lambda row: row["date"],
@@ -377,17 +378,19 @@ def build_quote_from_rows(provider_symbol: str, rows: list[dict]) -> dict:
         "currency": "CNY" if provider_symbol.endswith((".SS", ".SZ", ".BJ")) else "USD",
         "marketDate": str(latest["date"]),
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "source": "Yahoo Finance via yfinance",
+        "source": source,
     }
 
 
 def get_quotes(provider_symbols: list[str], *, force: bool = False) -> list[dict]:
     series = get_yfinance_latest_series(provider_symbols, force=force)
+    sources = series_sources(provider_symbols, latest=True)
     quotes = []
     for symbol in provider_symbols:
         rows = series.get(symbol) or []
         if rows:
-            quotes.append(build_quote_from_rows(symbol, rows))
+            source = "IBKR TWS" if sources.get(symbol) == "ibkr" else "Yahoo Finance via yfinance"
+            quotes.append(build_quote_from_rows(symbol, rows, source))
             continue
         quotes.append(get_quote(symbol))
     return quotes
@@ -562,14 +565,8 @@ def _with_stock_analysis_cache(
     return value
 
 
-def _fetch_stock_analysis(provider_symbol: str, range_id: str = "3m", custom_start: str = "") -> dict:
+def _fetch_yfinance_analysis_rows(symbol: str, config: dict) -> tuple[list[dict], str]:
     import yfinance as yf
-
-    symbol = (provider_symbol or "").strip().upper()
-    if not YAHOO_SYMBOL_PATTERN.fullmatch(symbol):
-        raise ValueError("股票代码格式不正确")
-    selected_range, selected_start = validate_signal_range(range_id, custom_start)
-    config = get_technical_range_config(selected_range, selected_start)
 
     ticker = yf.Ticker(symbol)
     history = ticker.history(
@@ -607,6 +604,32 @@ def _fetch_stock_analysis(provider_symbol: str, range_id: str = "3m", custom_sta
         fast_info = {}
 
     currency = fast_info.get("currency") or ("CNY" if symbol.endswith((".SS", ".SZ", ".BJ")) else "USD")
+    return rows, currency
+
+
+def _fetch_stock_analysis(provider_symbol: str, range_id: str = "3m", custom_start: str = "") -> dict:
+    symbol = (provider_symbol or "").strip().upper()
+    if not YAHOO_SYMBOL_PATTERN.fullmatch(symbol):
+        raise ValueError("股票代码格式不正确")
+    selected_range, selected_start = validate_signal_range(range_id, custom_start)
+    config = get_technical_range_config(selected_range, selected_start)
+
+    rows: list[dict] | None = None
+    source = "Yahoo Finance"
+    currency = "USD"
+    if ibkr_contract_spec(symbol):
+        try:
+            rows = fetch_ibkr_bars(
+                symbol,
+                interval=config["interval"],
+                start=date.today() - timedelta(days=int(config["lookback"])),
+            )
+            source = "IBKR TWS"
+        except IbkrUnavailable:
+            rows = None
+    if rows is None:
+        rows, currency = _fetch_yfinance_analysis_rows(symbol, config)
+
     result = build_stock_analysis_from_rows(
         symbol,
         rows,
@@ -615,7 +638,7 @@ def _fetch_stock_analysis(provider_symbol: str, range_id: str = "3m", custom_sta
         interval_label=config["label"],
         custom_start=selected_start or "",
     )
-    result.update({"timestamp": datetime.now(timezone.utc).isoformat(), "source": "Yahoo Finance"})
+    result.update({"timestamp": datetime.now(timezone.utc).isoformat(), "source": source})
     return result
 
 

@@ -9,6 +9,7 @@ import socket
 from datetime import datetime, timezone
 from typing import Callable
 
+from ibkr_market_data import ibkr_status
 from news_credentials import get_news_credential_status
 
 
@@ -72,11 +73,33 @@ def _checked_at() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _us_market_data_routing(checked_at: str) -> dict:
+    status = ibkr_status(connect=True)
+    if status["connected"]:
+        return {
+            "sourceId": "ibkr",
+            "state": "ready",
+            "checkedAt": checked_at,
+            "fallbackAvailable": True,
+            "port": status["port"],
+            "message": f"美股行情使用本机 TWS（端口 {status['port']}）只读读取；单个代码失败时回退免费源。",
+        }
+    return {
+        "sourceId": "free",
+        "state": "fallback",
+        "checkedAt": checked_at,
+        "fallbackAvailable": True,
+        "message": "未连接到本机 TWS / IB Gateway，美股暂用免费延迟数据。登录 TWS 并开启 API Socket 后自动切换。",
+        "detail": status["lastError"],
+    }
+
+
 def get_data_source_center() -> dict:
     checked_at = _checked_at()
+    us_routing = _us_market_data_routing(checked_at)
     return {
         "sources": [dict(source) for source in SOURCE_CATALOG],
-        "routing": {"china": "free", "united-states": "free"},
+        "routing": {"china": "free", "united-states": us_routing["sourceId"]},
         "service": {
             "state": "online",
             "checkedAt": checked_at,
@@ -94,13 +117,13 @@ def get_data_source_center() -> dict:
             }
         },
         "routingStatus": {
-            market: {
+            "china": {
                 "sourceId": "free",
                 "state": "ready",
                 "checkedAt": checked_at,
                 "fallbackAvailable": True,
-            }
-            for market in ("china", "united-states")
+            },
+            "united-states": us_routing,
         },
         "fallbackToFree": True,
         "newsCredentials": get_news_credential_status(),

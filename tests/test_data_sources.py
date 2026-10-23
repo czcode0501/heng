@@ -6,6 +6,8 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from data_sources import check_data_source, get_data_source_center
+
+DISCONNECTED = {"connected": False, "port": None, "lastError": "未连接到本机 TWS / IB Gateway"}
 from news_credentials import (
     get_news_api_key,
     get_news_credential_status,
@@ -15,7 +17,8 @@ from news_credentials import (
 
 class DataSourceCenterContractTests(unittest.TestCase):
     def test_catalog_exposes_free_and_four_optional_connector_types(self):
-        center = get_data_source_center()
+        with patch("data_sources.ibkr_status", return_value=DISCONNECTED):
+            center = get_data_source_center()
 
         self.assertEqual(
             [source["id"] for source in center["sources"]],
@@ -28,6 +31,25 @@ class DataSourceCenterContractTests(unittest.TestCase):
         self.assertIn("checkedAt", center["service"])
         self.assertEqual(center["routingStatus"]["china"]["state"], "ready")
         self.assertEqual(center["routingStatus"]["united-states"]["sourceId"], "free")
+
+    def test_us_routing_switches_to_ibkr_when_tws_is_connected(self):
+        with patch("data_sources.ibkr_status", return_value={"connected": True, "port": 7497, "lastError": ""}) as status:
+            center = get_data_source_center()
+
+        status.assert_called_once_with(connect=True)
+        self.assertEqual(center["routing"], {"china": "free", "united-states": "ibkr"})
+        self.assertEqual(center["routingStatus"]["united-states"]["port"], 7497)
+        self.assertTrue(center["routingStatus"]["united-states"]["fallbackAvailable"])
+        self.assertEqual(center["routingStatus"]["china"]["sourceId"], "free")
+
+    def test_us_routing_reports_fallback_when_tws_is_not_running(self):
+        with patch("data_sources.ibkr_status", return_value=DISCONNECTED):
+            center = get_data_source_center()
+
+        us = center["routingStatus"]["united-states"]
+        self.assertEqual(us["sourceId"], "free")
+        self.assertEqual(us["state"], "fallback")
+        self.assertIn("未连接", us["message"])
 
     def test_free_mode_is_ready_without_credentials(self):
         result = check_data_source("free", {})
@@ -124,7 +146,10 @@ class DataSourceCenterContractTests(unittest.TestCase):
 
     def test_data_source_center_exposes_news_configuration_status_only(self):
         secret = "finnhub-secret-value-123456"
-        with patch.dict(os.environ, {"FINNHUB_API_KEY": secret, "GNEWS_API_KEY": ""}, clear=False):
+        with (
+            patch.dict(os.environ, {"FINNHUB_API_KEY": secret, "GNEWS_API_KEY": ""}, clear=False),
+            patch("data_sources.ibkr_status", return_value=DISCONNECTED),
+        ):
             center = get_data_source_center()
 
         self.assertTrue(center["newsCredentials"]["finnhub"]["configured"])

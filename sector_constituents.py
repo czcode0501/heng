@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 
 from capital_flow import build_capital_flow_snapshot
-from market_data_hub import get_baostock_series, get_yfinance_series
+from market_data_hub import describe_us_source, get_baostock_series, get_yfinance_series
 from time_ranges import select_signal_rows, validate_signal_range
 
 
@@ -137,7 +137,7 @@ def build_sector_constituents(
         "asOf": max((stock["asOf"] for stock in stocks), default=None),
         "generatedAt": datetime.now(timezone.utc).isoformat(),
         "source": {
-            "name": "BaoStock" if market_id == "china" else "Yahoo Finance via yfinance",
+            "name": "BaoStock" if market_id == "china" else describe_us_source(provider_symbols)["name"],
             "access": "无需 API Key",
             "constituentMode": "公开研究成分池",
             "upstream": "czcode0501/sector-flow" if market_id == "united-states" else "流动性代表股研究池",

@@ -1277,6 +1277,7 @@ async function refreshDataSourceHealth() {
     if (!response.ok || !payload?.data?.service) throw new Error(payload?.error?.message || "数据服务健康状态格式不正确");
     dataSourceStatuses.service = payload.data.service;
     Object.assign(dataSourceStatuses, payload.data.sourceStatus || {});
+    dataSourceStatuses.routing = payload.data.routingStatus || {};
     newsCredentialStatuses = payload.data.newsCredentials || {};
   } catch (error) {
     const failure = dataSourceNetworkFailure(error);

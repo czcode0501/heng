@@ -10,6 +10,8 @@ from copy import deepcopy
 from datetime import date, timedelta
 from typing import Iterable
 
+from ibkr_market_data import fetch_ibkr_bars, fetch_with_fallback
+
 
 CACHE_TTL_SECONDS = 30 * 60
 LATEST_CACHE_TTL_SECONDS = 60
@@ -19,6 +21,9 @@ _YFINANCE_LOCK = threading.Lock()
 _YFINANCE_LATEST_LOCK = threading.Lock()
 _CACHE: dict[str, dict[str, dict]] = {"baostock": {}, "yfinance": {}}
 _LATEST_CACHE: dict[str, dict] = {}
+# 每个代码最近一次实际使用的行情来源："ibkr" 或 "yfinance"。
+_SERIES_SOURCE: dict[str, str] = {}
+_LATEST_SOURCE: dict[str, str] = {}
 LATEST_OVERLAY_EXCLUSIONS = {"sh.000974"}
 
 
@@ -85,6 +90,66 @@ def _fetch_yfinance_batch(symbols: list[str]) -> dict[str, list[dict]]:
     return bundle
 
 
+def _fetch_daily_batch(symbols: list[str]) -> dict[str, list[dict]]:
+    """Two years of adjusted daily rows: IBKR first for US symbols, yfinance for the rest."""
+    start = date.today() - timedelta(days=730)
+    rows, sources = fetch_with_fallback(
+        symbols,
+        lambda symbol: fetch_ibkr_bars(symbol, interval="1d", start=start, adjusted=True),
+        _fetch_yfinance_batch,
+        minimum=60,
+    )
+    _SERIES_SOURCE.update({symbol: "ibkr" if source == "ibkr" else "yfinance" for symbol, source in sources.items()})
+    return rows
+
+
+def _fetch_latest_batch(symbols: list[str]) -> dict[str, list[dict]]:
+    """Recent unadjusted daily rows including today's session: IBKR first, then yfinance."""
+    start = date.today() - timedelta(days=7)
+    rows, sources = fetch_with_fallback(
+        symbols,
+        lambda symbol: fetch_ibkr_bars(symbol, interval="1d", start=start, adjusted=False),
+        _fetch_yfinance_latest_batch,
+        minimum=2,
+    )
+    _LATEST_SOURCE.update({symbol: "ibkr" if source == "ibkr" else "yfinance" for symbol, source in sources.items()})
+    return rows
+
+
+def series_sources(symbols: Iterable[str], *, latest: bool = False) -> dict[str, str]:
+    """Return the provider ("ibkr" / "yfinance") that last supplied each symbol."""
+    registry = _LATEST_SOURCE if latest else _SERIES_SOURCE
+    return {symbol: registry[symbol] for symbol in _unique(symbols) if symbol in registry}
+
+
+def describe_us_source(symbols: Iterable[str], *, latest: bool = False) -> dict:
+    """Source metadata for a US workspace, reflecting IBKR use and any yfinance fallback."""
+    used = set(series_sources(symbols, latest=latest).values())
+    if used == {"ibkr"}:
+        return {
+            "name": "IBKR TWS",
+            "provider": "ibkr",
+            "mode": "broker-feed",
+            "access": "本机 TWS 只读行情",
+            "url": "https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/",
+        }
+    if "ibkr" in used:
+        return {
+            "name": "IBKR TWS + Yahoo Finance 回退",
+            "provider": "ibkr+yfinance",
+            "mode": "broker-feed",
+            "access": "部分代码 IBKR 未返回，已回退免费源",
+            "url": "https://www.interactivebrokers.com/campus/ibkr-api-page/twsapi-doc/",
+        }
+    return {
+        "name": "Yahoo Finance via yfinance",
+        "provider": "yfinance",
+        "mode": "zero-config",
+        "access": "无需 API Key · IBKR 未连接",
+        "url": "https://ranaroussi.github.io/yfinance",
+    }
+
+
 def _fetch_yfinance_latest_batch(symbols: list[str]) -> dict[str, list[dict]]:
     """Fetch recent unadjusted daily rows, including today's partial session when available."""
     import yfinance as yf
@@ -141,7 +206,7 @@ def get_yfinance_latest_series(symbols: Iterable[str], *, force: bool = False) -
             if force or symbol not in _LATEST_CACHE or now >= float(_LATEST_CACHE[symbol].get("expires") or 0)
         ]
         if missing:
-            fetched = _fetch_yfinance_latest_batch(missing)
+            fetched = _fetch_latest_batch(missing)
             expires = time.time() + LATEST_CACHE_TTL_SECONDS
             for symbol in missing:
                 rows = fetched.get(symbol) or []
@@ -237,7 +302,7 @@ def get_yfinance_series(
         force=force,
         minimum=minimum,
         lock=_YFINANCE_LOCK,
-        fetcher=_fetch_yfinance_batch,
+        fetcher=_fetch_daily_batch,
     )
 
 
@@ -292,3 +357,5 @@ def reset_market_data_hub_cache() -> None:
         _CACHE["baostock"].clear()
         _CACHE["yfinance"].clear()
         _LATEST_CACHE.clear()
+        _SERIES_SOURCE.clear()
+        _LATEST_SOURCE.clear()
