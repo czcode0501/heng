@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { renderStockAnalysisMarkup } from "../signals/stock-analysis/view.js";
 import {
   buildStockDecision,
+  stabilizationGate,
   holdingDaysFromSliderPosition,
   holdingPeriodAt,
   holdingPeriodIndex,
@@ -446,4 +447,43 @@ test("position sizing never presents zero shares as an executable order", () => 
   assert.match(html, /低于最小交易单位/);
   assert.match(html, /不会用“0股”伪装成可执行计划/);
   assert.doesNotMatch(html, />0 股</);
+});
+
+test("cooling sentiment blocks buying but is not reported as an extreme risk environment", () => {
+  // 实测 AAPL：美股择时 61.7 偏多、情绪 37.8 谨慎降温，个股强势上涨
+  const decision = buildStockDecision(
+    { ...payload, analysis: { ...payload.analysis, trend: "strong_up", rsi14: 61.6, macdHistogram: 0.22 } },
+    {
+      held: false,
+      timing: { score: 61.7, label: "偏多", exposureBand: "60%–80%", confidence: "高" },
+      sector: { title: "信息技术", score: 55, rank: 6, phase: "中性", flowScore: 50 },
+      sentiment: { score: 37.8, phase: "谨慎降温", tone: "negative", confidence: 70 },
+    },
+  );
+
+  assert.equal(decision.action.code, "wait-stabilization");
+  assert.equal(decision.action.verb, "等待");
+  assert.equal(decision.action.reason, "sentiment");
+  assert.doesNotMatch(decision.action.label, /极端风险/);
+  assert.match(decision.action.label, /谨慎降温/);
+});
+
+test("missing market timing is labelled as missing data, not extreme risk", () => {
+  const decision = buildStockDecision(
+    { ...payload, analysis: { ...payload.analysis, trend: "up", macdHistogram: 0.3 } },
+    { held: false, sector: { title: "信息技术", score: 55, rank: 6, phase: "中性", flowScore: 50 } },
+  );
+
+  assert.equal(decision.action.verb, "等待");
+  assert.doesNotMatch(decision.action.label, /极端风险/);
+  assert.match(decision.action.label, /市场择时数据缺失/);
+});
+
+test("stabilization gate reports the real trigger in priority order", () => {
+  const base = { technicallyWeak: false, timingAvailable: true, timingScore: 60, environmentDescription: "", sentiment: { phase: "恐慌恶化" }, sentimentScore: 20 };
+  assert.equal(stabilizationGate({ ...base, technicallyWeak: true }).reason, "technical");
+  assert.equal(stabilizationGate({ ...base, timingScore: 20 }).reason, "extreme-environment");
+  assert.equal(stabilizationGate({ ...base, environmentDescription: "滞胀 防守" }).label, "极端风险环境，等待企稳");
+  assert.equal(stabilizationGate({ ...base, timingAvailable: false, timingScore: null }).reason, "timing-unavailable");
+  assert.equal(stabilizationGate(base).label, "投资者情绪恐慌恶化，等待企稳");
 });

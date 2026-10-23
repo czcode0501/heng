@@ -1280,6 +1280,9 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
 .sector-phase { display: inline-flex; padding: 3px 5px; color: var(--muted); background: var(--surface-raised); border-radius: 3px; font-size: 8px; font-weight: 800; }
 .sector-phase.positive { color: var(--accent); background: var(--accent-soft); }.sector-phase.negative { color: var(--danger); background: var(--danger-soft); }.sector-phase.warning { color: var(--warning); background: var(--warning-soft); }
 .sector-evidence { margin: 0 18px 18px; padding: 16px; background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.sector-data-tag { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; background: var(--warning-soft); color: var(--warning); font-size: 10px; font-style: normal; font-weight: 700; }
+.sector-data-tag.anomaly, .sector-data-corrections.anomaly strong { color: var(--danger); }
+.sector-data-corrections { margin: 10px 0 0; padding: 8px 12px; border-radius: var(--radius-sm); background: var(--warning-soft); color: var(--text); font-size: 12px; line-height: 1.6; }
 .sector-evidence-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
 .sector-evidence-header span { color: var(--market-accent); font-size: 8px; font-weight: 800; letter-spacing: .12em; }
 .sector-evidence-header h4 { margin: 4px 0 0; font-size: 15px; }

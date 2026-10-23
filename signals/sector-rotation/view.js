@@ -24,6 +24,29 @@ function marketMeta(id) {
     : { code: "US", english: "UNITED STATES EQUITIES", className: "united-states" };
 }
 
+export function describeSectorDataCorrections(sector) {
+  const quality = sector?.dataQuality || {};
+  const corrections = Array.isArray(quality.corrections) ? quality.corrections : [];
+  if (!corrections.length) return null;
+  const issues = (quality.issues || []).filter((issue) => corrections.some(({ date }) => String(issue).startsWith(date)));
+  return {
+    anomaly: quality.status === "anomaly",
+    tag: quality.status === "anomaly" ? "数据异常" : "已修正",
+    text: issues.join("；"),
+  };
+}
+
+function renderSectorDataTag(sector) {
+  const quality = describeSectorDataCorrections(sector);
+  return quality ? `<em class="sector-data-tag${quality.anomaly ? " anomaly" : ""}">${quality.tag}</em>` : "";
+}
+
+function renderSectorDataNote(sector) {
+  const quality = describeSectorDataCorrections(sector);
+  if (!quality) return "";
+  return `<p class="sector-data-corrections${quality.anomaly ? " anomaly" : ""}" role="note"><strong>${quality.anomaly ? "数据异常" : "数据修正"}：</strong>${escapeHtml(quality.text)}</p>`;
+}
+
 function signed(value, suffix = "") {
   const number = Number(value) || 0;
   return `${number > 0 ? "+" : ""}${number.toFixed(1)}${suffix}`;
@@ -119,7 +142,7 @@ function renderRanking(market, activeId) {
     <div class="sector-table-wrap"><table><thead><tr><th>排名</th><th>板块</th><th>综合分</th><th>20日</th><th>阶段</th><th>建议</th><th>目标权重</th><th></th></tr></thead><tbody>
       ${(market.sectors || []).map((sector) => `<tr class="${activeId === sector.id ? "active" : ""}">
         <td><strong class="rank-number">${sector.rank}</strong>${rankChange(sector)}</td>
-        <td><b>${escapeHtml(sector.title)}</b><small>${escapeHtml(sector.symbol)}</small></td>
+        <td><b>${escapeHtml(sector.title)}</b><small>${escapeHtml(sector.symbol)}</small>${renderSectorDataTag(sector)}</td>
         <td><strong>${Number(sector.score).toFixed(1)}</strong><small class="${Number(sector.scoreChange) >= 0 ? "positive" : "negative"}">${signed(sector.scoreChange)}</small></td>
         <td class="${Number(sector.returns?.["20d"]) >= 0 ? "positive" : "negative"}">${signed(sector.returns?.["20d"], "%")}</td>
         <td><span class="sector-phase ${escapeHtml(sector.phase?.tone || "neutral")}">${escapeHtml(sector.phase?.label)}</span></td>
@@ -140,6 +163,7 @@ function renderDetail(market, sector, range, customStart) {
   const periodChange = start?.value ? (end.value / start.value - 1) * 100 : 0;
   return `<section class="sector-evidence" aria-labelledby="sector-evidence-${escapeHtml(market.id)}">
     <header class="sector-evidence-header"><div><span>SECTOR EVIDENCE · ${rangeName(range)}</span><h4 id="sector-evidence-${escapeHtml(market.id)}">${escapeHtml(sector.title)} · 六维证据</h4><p>${escapeHtml(sector.instrument)} · ${escapeHtml(sector.symbol)} · 截至 ${escapeHtml(market.asOf)}</p></div><div><strong>${Number(sector.score).toFixed(1)}</strong><em>${escapeHtml(sector.phase?.label)} · ${escapeHtml(sector.action?.label)}</em><small>置信度 ${Number(sector.confidence).toFixed(0)}%</small></div></header>
+    ${renderSectorDataNote(sector)}
     <div class="sector-evidence-grid">
       <figure class="sector-history-chart">
         <figcaption><div><span>区间走势（起点归一为 100）</span><strong class="${periodChange >= 0 ? "positive" : "negative"}">${signed(periodChange, "%")}</strong></div><small>鼠标移动或使用左右方向键查看具体日期</small></figcaption>

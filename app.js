@@ -1,4 +1,6 @@
 import { getSearchResultActions } from "./search-flow.js";
+import { describeMarketSessions } from "./market-session.js";
+import { analysisQuoteForStock } from "./quote-change.js";
 import { resolveWorkspaceRoute, shouldForceWorkspaceRefresh, signalDirectories } from "./signals/catalog.js";
 import { detectHeldMarkets, renderOverviewSignalLinks } from "./overview-signals.js";
 import { buildOverviewActionModel, renderOverviewActionPanel } from "./overview-actions.js";
@@ -391,7 +393,8 @@ async function refreshPortfolioQuotes(force = false) {
   window.clearTimeout(portfolioQuoteRefreshTimer);
   const stocks = heldQuoteStocks();
   if (!stocks.length) {
-    elements.marketDataStatus.textContent = "A股盘中 / 美股交易时段 · 暂无自建持仓";
+    elements.marketDataStatus.textContent = `${describeMarketSessions()} · 暂无自建持仓`;
+    portfolioQuoteRefreshTimer = window.setTimeout(() => refreshPortfolioQuotes(false).catch(() => null), 60_000);
     return [];
   }
   if (portfolioQuoteRequest) return portfolioQuoteRequest;
@@ -1973,15 +1976,10 @@ async function openStockAnalysis(result, focusSelector = "", options = {}) {
         sector: result.sector || null,
         industry: result.industry || null,
       };
-      applyQuoteToStock(stock, payload.data);
+      applyQuoteToStock(stock, analysisQuoteForStock(payload.data));
       stockCatalog.push(stock);
     } else {
-      applyQuoteToStock(existingStock, {
-        ...payload.data,
-        changePercent: payload.data.previousClose
-          ? (Number(payload.data.price) / Number(payload.data.previousClose) - 1) * 100
-          : existingStock.change,
-      });
+      applyQuoteToStock(existingStock, analysisQuoteForStock(payload.data, existingStock.change));
       existingStock.sectorId = result.sectorId || existingStock.sectorId || null;
       existingStock.sector = result.sector || existingStock.sector || null;
       existingStock.industry = result.industry || existingStock.industry || null;

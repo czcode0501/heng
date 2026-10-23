@@ -8,7 +8,11 @@ from copy import deepcopy
 from typing import Iterable
 
 from capital_flow import build_capital_flow_snapshot
+from price_series_quality import describe_correction, repair_price_series
 
+
+# 指数/ETF 代理的单日合理变动上限：A股涨跌幅限制最高 20%；美股无涨跌停，放宽到 30%。
+MAX_PROXY_DAILY_MOVE = {"china": 0.2, "united-states": 0.3}
 
 DIMENSION_WEIGHTS = {
     "relativeMomentum": 30,
@@ -285,11 +289,19 @@ def build_sector_market(
     timing_score: float = 50,
 ) -> dict:
     """Build one independently ranked market from source-backed daily histories."""
-    benchmark = _validated_series(benchmark_points, f"{title}基准", minimum=121)
+    max_move = MAX_PROXY_DAILY_MOVE.get(market_id, 0.3)
+    benchmark, _ = repair_price_series(
+        _validated_series(benchmark_points, f"{title}基准", minimum=121), max_daily_move=max_move
+    )
     definitions = []
     for definition in sector_definitions:
         item = deepcopy(definition)
-        item["points"] = _validated_series(item.get("points", []), item.get("title", "板块"))
+        points, corrections = repair_price_series(
+            _validated_series(item.get("points", []), item.get("title", "板块")), max_daily_move=max_move
+        )
+        item["points"] = points
+        item["corrections"] = corrections
+        item["issues"] = list(item.get("issues", [])) + [describe_correction(correction) for correction in corrections]
         definitions.append(item)
     if len(definitions) != 11:
         raise ValueError(f"{title}需要11个一级板块，当前为{len(definitions)}个")
@@ -327,8 +339,11 @@ def build_sector_market(
                 },
                 "history": _normalized_history(definition["points"]),
                 "dataQuality": {
-                    "status": "live" if score["confidence"] >= 70 else "partial",
+                    "status": "anomaly"
+                    if any(item["type"] == "unresolved-jump" for item in definition["corrections"])
+                    else "live" if score["confidence"] >= 70 else "partial",
                     "issues": score["issues"],
+                    "corrections": definition["corrections"],
                     "observations": len(definition["points"]),
                 },
             }
@@ -366,7 +381,10 @@ def build_sector_market(
         },
         "sectors": sectors,
         "dataQuality": {
-            "status": "live" if all(sector["confidence"] >= 70 for sector in sectors) else "partial",
+            "status": "live"
+            if all(sector["confidence"] >= 70 and sector["dataQuality"]["status"] != "anomaly" for sector in sectors)
+            else "partial",
+            "correctedSectors": sum(bool(sector["dataQuality"]["corrections"]) for sector in sectors),
             "availableSectors": len(sectors),
             "expectedSectors": 11,
         },

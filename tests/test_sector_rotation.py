@@ -58,6 +58,46 @@ class SectorRotationModelTests(unittest.TestCase):
         self.assertGreater(market["sectors"][0]["score"], market["sectors"][-1]["score"])
         self.assertEqual(market["timing"]["maxExposure"], 60)
 
+    def test_unrecorded_etf_split_is_adjusted_before_scoring(self):
+        benchmark = make_series(3_000, 1)
+        definitions = [
+            {"id": f"sector-{index}", "title": f"板块{index}", "symbol": f"S{index}", "points": make_series(1_000, 1)}
+            for index in range(11)
+        ]
+        broken = make_series(3.0, 0.001)
+        for row in broken[200:]:
+            for field in ("open", "high", "low", "close"):
+                row[field] /= 3
+            row["volume"] *= 3
+        definitions[0]["points"] = broken
+
+        market = build_sector_market(
+            "china", "中国股票", benchmark, definitions, {"name": "测试数据"}, timing_score=65
+        )
+        sector = next(item for item in market["sectors"] if item["id"] == "sector-0")
+
+        self.assertEqual([item["type"] for item in sector["dataQuality"]["corrections"]], ["split-adjusted"])
+        self.assertGreater(sector["returns"]["120d"], 0)
+        self.assertTrue(any("份额拆分 1:3" in issue for issue in sector["dataQuality"]["issues"]))
+        self.assertEqual(market["dataQuality"]["correctedSectors"], 1)
+
+    def test_unexplained_jump_marks_sector_and_market_quality(self):
+        benchmark = make_series(3_000, 1)
+        definitions = [
+            {"id": f"sector-{index}", "title": f"板块{index}", "symbol": f"S{index}", "points": make_series(1_000, 1)}
+            for index in range(11)
+        ]
+        for row in definitions[0]["points"][230:]:
+            row["close"] *= 0.6
+
+        market = build_sector_market(
+            "china", "中国股票", benchmark, definitions, {"name": "测试数据"}, timing_score=65
+        )
+        sector = next(item for item in market["sectors"] if item["id"] == "sector-0")
+
+        self.assertEqual(sector["dataQuality"]["status"], "anomaly")
+        self.assertEqual(market["dataQuality"]["status"], "partial")
+
     def test_position_weights_respect_market_and_single_sector_caps(self):
         benchmark = make_series(3_000, 1)
         definitions = [

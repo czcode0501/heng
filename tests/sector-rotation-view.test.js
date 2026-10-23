@@ -89,3 +89,39 @@ test("sector rotation renders independent China and US workspaces with ranking a
   assert.match(html, /目标权重/);
   assert.match(html, /中性占位/);
 });
+
+test("corrected and anomalous proxy series are labelled in the ranking and evidence panel", () => {
+  const corrected = {
+    ...sector("communication-services", "通信服务", 1),
+    dataQuality: {
+      status: "live",
+      observations: 140,
+      issues: ["2026-02-03 疑似份额拆分 1:3，此前价格已按比例复权", "相对动量样本不足"],
+      corrections: [{ date: "2026-02-03", type: "split-adjusted", ratio: 3, move: -65.7 }],
+    },
+  };
+  const anomalous = {
+    ...sector("energy", "能源", 2),
+    dataQuality: {
+      status: "anomaly",
+      observations: 140,
+      issues: ["2026-03-02 单日变动 -40.0% 超出合理范围且无法识别原因，请谨慎参考"],
+      corrections: [{ date: "2026-03-02", type: "unresolved-jump", move: -40 }],
+    },
+  };
+  const html = renderSectorRotationWorkspace(
+    { ...payload, markets: [{ ...market("china", "中国股票"), sectors: [corrected, anomalous] }, market("united-states", "美国股票")] },
+    { range: "3m", activeSectors: { china: "communication-services", "united-states": "financials" } },
+  );
+
+  assert.match(html, /class="sector-data-tag">已修正</);
+  assert.match(html, /class="sector-data-tag anomaly">数据异常</);
+  assert.match(html, /数据修正：<\/strong>2026-02-03 疑似份额拆分 1:3/);
+  assert.doesNotMatch(html, /数据修正：<\/strong>[^<]*相对动量样本不足/);
+});
+
+test("sectors without corrections render no data-quality tag", () => {
+  const html = renderSectorRotationWorkspace(payload, { range: "3m" });
+  assert.doesNotMatch(html, /sector-data-tag/);
+  assert.doesNotMatch(html, /sector-data-corrections/);
+});

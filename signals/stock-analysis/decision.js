@@ -116,6 +116,21 @@ function percentDistance(from, to) {
   return from ? ((to - from) / from) * 100 : null;
 }
 
+// 等待企稳是硬门槛；文案必须说明真正触发它的原因，不能把情绪降温或数据缺失说成“极端风险”。
+export function stabilizationGate({ technicallyWeak, timingAvailable, timingScore, environmentDescription, sentiment, sentimentScore }) {
+  if (technicallyWeak) {
+    return { reason: "technical", label: "个股趋势未企稳，暂不买入", detail: "个股趋势与MACD仍向下，" };
+  }
+  if (timingAvailable && (timingScore < 25 || /衰退|滞胀|危机|风险规避/.test(environmentDescription || ""))) {
+    return { reason: "extreme-environment", label: "极端风险环境，等待企稳", detail: "市场环境已触发风险硬门槛，" };
+  }
+  if (!timingAvailable) {
+    return { reason: "timing-unavailable", label: "市场择时数据缺失，等待数据恢复", detail: "市场方向无法确认，" };
+  }
+  const phase = sentiment?.phase || (Number.isFinite(sentimentScore) ? `情绪 ${sentimentScore.toFixed(1)}` : "情绪转弱");
+  return { reason: "sentiment", label: `投资者情绪${phase}，等待企稳`, detail: "情绪仍在走弱，" };
+}
+
 function includesDefensive(text) {
   return /防守|收缩|衰退|滞胀|风险规避|恶化|落后/.test(String(text || ""));
 }
@@ -330,11 +345,13 @@ export function buildStockDecision(payload, context = {}) {
       summary: `${sectorFact}，板块轮动与个股买点没有形成共振；即使价格靠近支撑，也先等待板块止跌或资金转强。`,
     };
   } else if (technicallyWeak || extremeRiskEnvironment || sentimentWeak) {
+    const gate = stabilizationGate({ technicallyWeak, timingAvailable, timingScore, environmentDescription, sentiment, sentimentScore });
     action = {
       code: "wait-stabilization",
-      label: technicallyWeak ? "个股趋势未企稳，暂不买入" : "极端风险环境，等待企稳",
+      reason: gate.reason,
+      label: gate.label,
       tone: "negative",
-      summary: `${sectorFact}；${sentimentFact}。当前风险已触发硬门槛，即使进入支撑区也不新增仓位，等待市场或价格结构恢复。`,
+      summary: `${sectorFact}；${sentimentFact}。${gate.detail}即使进入支撑区也不新增仓位，等待市场或价格结构恢复。`,
     };
   } else if (nearPressure || overheated) {
     action = {
