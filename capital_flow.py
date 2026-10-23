@@ -70,7 +70,26 @@ def _validated_points(points: Iterable[dict]) -> list[dict]:
     rows.sort(key=lambda item: item["date"])
     if len(rows) < 21:
         raise ValueError("资金流模型至少需要21个有效交易日")
+    _fill_missing_amounts(rows)
     return rows
+
+
+def _fill_missing_amounts(rows: list[dict], lookback: int = 20) -> None:
+    """Estimate missing turnover from the series' own turnover-per-share, never from index points.
+
+    指数的成交量是成分股股数，点位 × 股数不是成交额。序列中只要有真实成交额（BaoStock），
+    缺失日（例如盘中由 Yahoo 补全的当日行）就按近期“成交额 / 成交量”中位数估算。
+    整条序列都没有成交额时（美股 ETF），保持为 0，由下游按价格 × 成交量估算。
+    """
+    reported = [(index, row["amount"] / row["volume"]) for index, row in enumerate(rows) if row["amount"] > 0 and row["volume"] > 0]
+    if not reported:
+        return
+    for index, row in enumerate(rows):
+        if row["amount"] > 0 or row["volume"] <= 0:
+            continue
+        nearby = [ratio for source_index, ratio in reported if source_index < index][-lookback:] or [ratio for _, ratio in reported[:lookback]]
+        row["amount"] = row["volume"] * statistics.median(nearby)
+        row["amountEstimated"] = True
 
 
 def _money_flow_multiplier(point: dict) -> float:

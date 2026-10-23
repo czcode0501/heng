@@ -113,6 +113,21 @@ class MarketDataHubTests(unittest.TestCase):
 
         self.assertEqual([row["date"] for row in merged], ["2026-08-14", "2026-08-17"])
         self.assertEqual(merged[-1]["close"], 104)
+    def test_complete_eod_row_is_not_overwritten_by_intraday_row_without_turnover(self):
+        # 中证全指能源 2026-10-23：BaoStock 收盘后日线有真实成交额，Yahoo 同日行 amount=0。
+        history = [
+            {"date": "2026-10-22", "open": 2689.69, "high": 2689.69, "low": 2637.09, "close": 2646.58, "volume": 1_875_299_700.0, "amount": 20_053_352_238.5},
+            {"date": "2026-10-23", "open": 2626.41, "high": 2649.97, "low": 2597.35, "close": 2649.97, "volume": 2_113_804_200.0, "amount": 21_174_633_302.5},
+        ]
+        yahoo = [
+            {"date": "2026-10-23", "open": 2626.41, "high": 2649.97, "low": 2597.35, "close": 2649.97, "volume": 2_113_804_200.0, "amount": 0.0},
+        ]
+
+        merged = merge_latest_rows(history, yahoo)
+
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[-1]["amount"], 21_174_633_302.5)
+
 
 
 if __name__ == "__main__":

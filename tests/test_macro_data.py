@@ -59,6 +59,50 @@ class MacroDataContractTests(unittest.TestCase):
         self.assertAlmostEqual(yoy[-1]["value"], (124 / 112 - 1) * 100, places=4)
         self.assertEqual(mom[-1]["value"], 1.0)
 
+    def test_missing_bls_month_does_not_shift_year_over_year_comparisons(self):
+        # BLS 因 2025 年政府停摆未发布 2025-10 CPI（API 值为 "-"）。真实 CPI-U 指数：
+        cpi = {
+            ("2025", "M08"): "323.976", ("2025", "M09"): "324.800", ("2025", "M10"): "-",
+            ("2025", "M11"): "324.122", ("2025", "M12"): "324.054",
+            ("2026", "M08"): "334.980", ("2026", "M09"): "336.940",
+        }
+        payload = {
+            "status": "REQUEST_SUCCEEDED",
+            "Results": {"series": [{
+                "seriesID": "CUUR0000SA0",
+                "data": [
+                    {"year": year, "period": period, "value": value,
+                     "footnotes": [{"text": "Data unavailable due to the 2025 lapse in appropriations"}] if value == "-" else []}
+                    for (year, period), value in cpi.items()
+                ],
+            }]},
+        }
+
+        yoy = {point["date"]: point["value"] for point in year_over_year(parse_bls_payload(payload)["CUUR0000SA0"])}
+
+        # BLS 官方：2026 年 9 月 3.7%、8 月 3.4%；按行位置回溯会得到 4.0% / 3.7%。
+        self.assertEqual(sorted(yoy), ["2026-08", "2026-09"])
+        self.assertAlmostEqual(yoy["2026-09"], (336.940 / 324.800 - 1) * 100, places=4)
+        self.assertEqual(round(yoy["2026-09"], 1), 3.7)
+        self.assertEqual(round(yoy["2026-08"], 1), 3.4)
+
+    def test_month_over_month_change_skips_a_missing_prior_month(self):
+        points = [
+            {"date": "2025-09", "value": 159_500.0},
+            {"date": "2025-11", "value": 159_700.0},
+            {"date": "2025-12", "value": 159_750.0},
+        ]
+
+        changes = period_change(points)
+
+        # 2025-11 的上一月缺失，不能把两个月的变化当作单月增量。
+        self.assertEqual(changes, [{"date": "2025-12", "value": 50.0}])
+
+    def test_year_over_year_handles_year_boundaries_and_unsorted_gaps(self):
+        points = [{"date": "2024-12", "value": 100.0}, {"date": "2025-01", "value": 101.0}, {"date": "2025-12", "value": 110.0}]
+
+        self.assertEqual(year_over_year(points), [{"date": "2025-12", "value": 10.0}])
+
     def test_h15_parser_exposes_official_series_and_curve_spread(self):
         csv_text = """\"Series Description\",\"Fed funds\",\"2 year\",\"10 year\",\"10 year real\"\n\"Unit:\",\"Percent\",\"Percent\",\"Percent\",\"Percent\"\n\"Multiplier:\",\"1\",\"1\",\"1\",\"1\"\n\"Currency:\",\"NA\",\"NA\",\"NA\",\"NA\"\n\"Unique Identifier: \",\"H15/H15/RIFSPFF_N.M\",\"H15/H15/RIFLGFCY02_N.M\",\"H15/H15/RIFLGFCY10_N.M\",\"H15/H15/RIFLGFCY10_XII_N.M\"\n\"Time Period\",\"RIFSPFF_N.M\",\"RIFLGFCY02_N.M\",\"RIFLGFCY10_N.M\",\"RIFLGFCY10_XII_N.M\"\n2026-06,3.63,4.11,4.47,2.18\n2026-07,3.63,4.22,4.60,2.35\n"""
 

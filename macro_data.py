@@ -98,23 +98,38 @@ def parse_h15_csv(csv_text: str) -> dict[str, list[dict]]:
     return {series_id: _sorted_points(points) for series_id, points in parsed.items()}
 
 
+def _months_before(date: str, months: int) -> str:
+    year, month = (int(part) for part in date[:7].split("-"))
+    index = year * 12 + (month - 1) - months
+    return f"{index // 12:04d}-{index % 12 + 1:02d}"
+
+
+def _paired_with_earlier_month(points: list[dict], months: int) -> list[tuple[str, float, float]]:
+    """Pair each point with the same series exactly `months` calendar months earlier.
+
+    官方序列可能缺月（例如 BLS 因 2025 年政府停摆未发布 2025-10 数据）。按行位置回溯会把
+    缺月之后的比较错位到更早的月份，因此一律按日历月份对齐；目标月份缺失时不输出该点。
+    """
+    by_date = {point["date"]: float(point["value"]) for point in points}
+    return [
+        (point["date"], float(point["value"]), by_date[earlier])
+        for point in points
+        if (earlier := _months_before(point["date"], months)) in by_date
+    ]
+
+
 def year_over_year(points: list[dict], periods: int = 12) -> list[dict]:
-    result = []
-    for index in range(periods, len(points)):
-        previous = float(points[index - periods]["value"])
-        current = float(points[index]["value"])
-        if previous:
-            result.append({"date": points[index]["date"], "value": round((current / previous - 1) * 100, 6)})
-    return result
+    return [
+        {"date": date, "value": round((current / previous - 1) * 100, 6)}
+        for date, current, previous in _paired_with_earlier_month(points, periods)
+        if previous
+    ]
 
 
 def period_change(points: list[dict], periods: int = 1) -> list[dict]:
     return [
-        {
-            "date": points[index]["date"],
-            "value": round(float(points[index]["value"]) - float(points[index - periods]["value"]), 6),
-        }
-        for index in range(periods, len(points))
+        {"date": date, "value": round(current - previous, 6)}
+        for date, current, previous in _paired_with_earlier_month(points, periods)
     ]
 
 

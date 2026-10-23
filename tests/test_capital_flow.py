@@ -77,6 +77,36 @@ class CapitalFlowModelTests(unittest.TestCase):
         metrics = compute_capital_flow_metrics(points)
 
         self.assertLess(metrics["estimatedNetFlow"]["1d"], points[-1]["volume"] * 11)
+    def test_index_day_without_turnover_is_estimated_from_turnover_per_share_not_points(self):
+        # A股行业指数：点位约 2650，成交量是成分股股数，成交额约为成交量 × 10 元。
+        rows = []
+        for index in range(60):
+            close = 2600 + index
+            volume = 2_000_000_000.0 + index * 1_000_000
+            rows.append({
+                "date": f"2026-{8 + index // 28:02d}-{index % 28 + 1:02d}",
+                "high": close + 20, "low": close - 20, "close": close + 15,
+                "volume": volume, "amount": volume * 10.0,
+            })
+        complete = [dict(row) for row in rows]
+        intraday = [dict(row) for row in rows]
+        intraday[-1]["amount"] = 0.0  # 盘中由 Yahoo 补全的当日行没有成交额
+
+        expected = compute_capital_flow_metrics(complete)["estimatedNetFlow"]["1d"]
+        actual = compute_capital_flow_metrics(intraday)["estimatedNetFlow"]["1d"]
+
+        # 修复前会用 点位 × 股数（约 5.3 万亿）估算，放大约 265 倍。
+        self.assertAlmostEqual(actual, expected, delta=abs(expected) * 0.01)
+        self.assertLess(abs(actual), rows[-1]["volume"] * 10.0)
+
+    def test_series_without_any_reported_turnover_keeps_price_times_volume(self):
+        rows = make_flow_series()
+        metrics = compute_capital_flow_metrics(rows)
+        last = rows[-1]
+        typical = (last["high"] + last["low"] + last["close"]) / 3
+
+        self.assertAlmostEqual(metrics["estimatedNetFlow"]["1d"], 0.9 * last["volume"] * typical, delta=1_000)
+
 
 
 if __name__ == "__main__":

@@ -184,11 +184,15 @@ def baostock_to_yahoo_symbol(symbol: str) -> str:
 
 
 def merge_latest_rows(history: list[dict], latest: list[dict]) -> list[dict]:
-    """Merge recent provider rows by market date without discarding long history."""
+    """Append intraday provider rows for dates the EOD history does not cover yet.
+
+    BaoStock 收盘后的日线包含真实成交额；Yahoo 的同日数据没有成交额（amount=0）。
+    已有的完整日线不能被覆盖，否则下游会丢失成交额并错误地用指数点位估算。
+    """
     combined = {str(row.get("date")): dict(row) for row in history if row.get("date")}
     for row in latest:
         market_date = str(row.get("date") or "")
-        if market_date:
+        if market_date and market_date not in combined:
             combined[market_date] = dict(row)
     return [combined[key] for key in sorted(combined)]
 
