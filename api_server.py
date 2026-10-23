@@ -25,6 +25,7 @@ from sector_constituents import SECTOR_CONSTITUENTS, SECTOR_TITLES, build_sector
 from macro_data import get_macro_dashboard
 from market_timing import apply_market_timing_range
 from market_timing_sources import get_market_timing_dashboard
+from fx_rates import get_usd_cny_rate
 from ibkr_market_data import IbkrUnavailable, fetch_ibkr_bars, ibkr_contract_spec
 from market_data_hub import get_yfinance_latest_series, series_sources
 from micro_data import (
@@ -665,6 +666,10 @@ class MarketDataHandler(BaseHTTPRequestHandler):
                 query = validate_search_query(params.get("q", [""])[0])
                 data = search_instruments(query)
                 self.send_json(200, {"data": data, "meta": {"query": query, "count": len(data)}})
+                return
+            if parsed.path == "/api/fx":
+                data = get_usd_cny_rate(force=params.get("refresh", ["0"])[0] == "1")
+                self.send_json(200, {"data": data})
                 return
             if parsed.path == "/api/quotes":
                 batch_value = params.get("symbols", [""])[0]

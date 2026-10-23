@@ -1,6 +1,8 @@
 import { getSearchResultActions } from "./search-flow.js";
 import { describeMarketSessions } from "./market-session.js";
 import { analysisQuoteForStock } from "./quote-change.js";
+import { positionRecordGuard } from "./position-guard.js";
+import { fxRateLabel, loadCachedFxRate, saveFxRate, usdCnyRate } from "./fx-rate.js";
 import { resolveWorkspaceRoute, shouldForceWorkspaceRefresh, signalDirectories } from "./signals/catalog.js";
 import { detectHeldMarkets, renderOverviewSignalLinks } from "./overview-signals.js";
 import { buildOverviewActionModel, renderOverviewActionPanel } from "./overview-actions.js";
@@ -57,6 +59,7 @@ import {
   renderMicroWorkspaceLoading,
 } from "./signals/micro-data/view.js";
 import {
+  decisionDataSufficiency,
   renderStockAnalysisMarkup,
   renderStockDecisionDynamicMarkup,
 } from "./signals/stock-analysis/view.js";
@@ -143,7 +146,9 @@ for (const stock of savedPortfolioState.customStocks) {
 let activePortfolioId = portfolios.some(({ id }) => id === savedPortfolioState.activePortfolioId)
   ? savedPortfolioState.activePortfolioId
   : portfolios[0].id;
-const usdCny = 7.18;
+let fxRate = loadCachedFxRate(window.localStorage);
+let usdCny = usdCnyRate(fxRate);
+let fxRefreshTimer;
 let latestSearchResults = [];
 let searchTimer;
 let searchRequestId = 0;
@@ -197,6 +202,7 @@ let opportunityStability = (() => {
 })();
 if (cachedIbkrSnapshot) activePortfolioId = BROKER_PORTFOLIO_ID;
 let pendingPositionStock = null;
+let activeStockDecision = null;
 let signalTimeRange = "1m";
 let signalCustomStart = "";
 const activeMicroInstruments = { china: "csi300", "united-states": "sp500" };
@@ -337,6 +343,11 @@ const elements = {
   addPositionForm: document.querySelector("#add-position-form"),
   addPositionStock: document.querySelector("#add-position-stock"),
   purchaseCost: document.querySelector("#purchase-cost"),
+  addPositionTitle: document.querySelector("#add-position-title"),
+  addPositionGuard: document.querySelector("#add-position-guard"),
+  positionAck: document.querySelector("#position-ack"),
+  positionAckField: document.querySelector("#position-ack-field"),
+  addPositionSubmit: document.querySelector("#add-position-submit"),
   purchaseQuantity: document.querySelector("#purchase-quantity"),
   purchaseAmount: document.querySelector("#purchase-amount"),
   purchaseQuantityField: document.querySelector("#purchase-quantity-field"),
@@ -387,6 +398,32 @@ async function requestIbkrMarketQuotes(symbols) {
   } catch {
     return [];
   }
+}
+
+function renderFxRateStatus() {
+  const label = fxRateLabel(fxRate);
+  for (const element of document.querySelectorAll("[data-fx-rate-status]")) {
+    element.textContent = label;
+    element.classList.toggle("is-stale", !fxRate || Boolean(fxRate.stale));
+  }
+}
+
+async function refreshFxRate() {
+  window.clearTimeout(fxRefreshTimer);
+  try {
+    const response = await fetch("/api/fx", { headers: { Accept: "application/json" } });
+    const payload = await response.json();
+    if (!response.ok || !payload?.data?.rate) throw new Error(payload?.error?.message || "汇率读取失败");
+    const previous = usdCny;
+    fxRate = payload.data;
+    usdCny = usdCnyRate(fxRate);
+    saveFxRate(window.localStorage, fxRate);
+    if (Math.abs(previous - usdCny) > 1e-9) render();
+  } catch {
+    if (fxRate) fxRate = { ...fxRate, stale: true };
+  }
+  renderFxRateStatus();
+  fxRefreshTimer = window.setTimeout(refreshFxRate, 10 * 60_000);
 }
 
 async function refreshPortfolioQuotes(force = false) {
@@ -1649,12 +1686,21 @@ function renderSearchOptions(results) {
   elements.searchResults.hidden = false;
 }
 
+function positionGuardFor(stock, cost) {
+  const decision = activeStockDecision?.symbol === stock?.symbol ? activeStockDecision.decision : null;
+  const sufficient = decision ? decisionDataSufficiency(decision).sufficient : false;
+  return positionRecordGuard(decision, { cost, sufficient });
+}
+
 function updateAnalysisAddButton() {
   if (!activeAnalysisResult) return;
   const portfolio = activeCustomPortfolio();
   const actions = getSearchResultActions(portfolio, activeAnalysisResult);
+  const guard = positionGuardFor(activeAnalysisResult);
   elements.analysisAddButton.disabled = !actions.canAdd;
-  elements.analysisAddButton.textContent = actions.canAdd ? `添加到 ${portfolio.name}` : `已在 ${portfolio.name}`;
+  elements.analysisAddButton.textContent = !actions.canAdd
+    ? `已在 ${portfolio.name}`
+    : guard.mode === "buy-plan" ? `添加到 ${portfolio.name}` : guard.buttonLabel;
 }
 
 function renderAnalysisLoading() {
@@ -1783,6 +1829,8 @@ function renderStockAnalysis(payload) {
     holdingPeriod: analysisTimeRange,
     holdingDays: analysisHoldingDays,
   });
+  activeStockDecision = { symbol: activeAnalysisResult?.symbol, decision };
+  updateAnalysisAddButton();
   if (activeAnalysisResult?.symbol) {
     stockDecisionScores.set(stockDecisionScoreKey(activeAnalysisResult.symbol, decisionContext.managerId, decisionContext.analysisPreferences), decision.composite.score);
   }
@@ -2199,8 +2247,21 @@ function updatePurchaseMode() {
   updatePurchasePreview();
 }
 
+function renderPositionGuard() {
+  if (!pendingPositionStock) return null;
+  const guard = positionGuardFor(pendingPositionStock, elements.purchaseCost.value);
+  elements.addPositionTitle.textContent = guard.title;
+  elements.addPositionSubmit.textContent = guard.submitLabel;
+  elements.addPositionGuard.hidden = !guard.warnings.length;
+  elements.addPositionGuard.innerHTML = guard.warnings.map((warning) => `<p>${escapeHtml(warning)}</p>`).join("");
+  elements.positionAckField.hidden = !guard.requiresAcknowledgement;
+  elements.positionAck.required = guard.requiresAcknowledgement;
+  return guard;
+}
+
 function updatePurchasePreview() {
   if (!pendingPositionStock) return;
+  renderPositionGuard();
   const cost = Number(elements.purchaseCost.value);
   const mode = selectedPurchaseMode();
   const quantity = mode === "amount"
@@ -2222,6 +2283,7 @@ function openAddPositionDialog(stock) {
   elements.purchaseCost.value = String(stock.price);
   elements.purchaseQuantity.value = "";
   elements.purchaseAmount.value = "";
+  elements.positionAck.checked = false;
   updatePurchaseMode();
   if (!elements.addPositionDialog.open) elements.addPositionDialog.showModal();
   elements.purchaseQuantity.focus();
@@ -2248,6 +2310,12 @@ elements.addPositionForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const portfolio = activeCustomPortfolio();
   if (!pendingPositionStock || !portfolio) return;
+  const guard = renderPositionGuard();
+  if (guard?.requiresAcknowledgement && !elements.positionAck.checked) {
+    showToast("当前结论不是买入：请先确认这笔交易已在券商成交");
+    elements.positionAck.focus();
+    return;
+  }
   try {
     const position = createPositionFromPurchase(pendingPositionStock, {
       mode: selectedPurchaseMode(),
@@ -2981,6 +3049,8 @@ elements.themeToggle.addEventListener("click", () => {
 elements.refreshBrokerPositions?.addEventListener("click", () => refreshSavedIbkrSnapshot(true));
 
 render();
+renderFxRateStatus();
+refreshFxRate();
 queueMicrotask(refreshDataSourceHealth);
 refreshSavedIbkrSnapshot();
 refreshPortfolioQuotes().catch(() => null);

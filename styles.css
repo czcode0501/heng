@@ -1733,6 +1733,15 @@ dialog input, dialog textarea { padding: 11px 12px; border-radius: var(--radius-
 .purchase-mode-selector strong, .purchase-mode-selector small { display: block; }
 .purchase-mode-selector strong { color: var(--text); font-size: var(--font-size-sm); }
 .purchase-mode-selector small { margin-top: 3px; color: var(--muted); font-size: var(--font-size-xs); font-weight: 500; line-height: 1.45; }
+.fx-rate-status { margin: 8px 0 0; color: var(--muted); font-size: var(--font-size-xs); line-height: 1.4; }
+.fx-rate-status.is-stale { color: var(--warning); }
+.position-guard { margin: 4px 0 2px; padding: 10px 12px; color: var(--text); background: var(--warning-soft); border-left: 3px solid var(--warning); border-radius: var(--radius-sm); font-size: var(--font-size-sm); line-height: 1.5; }
+.position-guard p { margin: 0; }
+.position-guard p + p { margin-top: 6px; }
+.position-ack { display: flex; align-items: flex-start; gap: 8px; margin-top: 10px; color: var(--text); font-size: var(--font-size-sm); line-height: 1.5; }
+.position-ack input { margin-top: 3px; }
+.decision-essential.is-withheld strong { color: var(--muted); }
+.stock-structure-reference-note { margin: 0 0 12px; padding: 8px 12px; color: var(--text); background: var(--warning-soft); border-radius: var(--radius-sm); font-size: var(--font-size-sm); }
 .purchase-preview { margin: 6px 0 0; padding: 12px; color: var(--muted); background: var(--surface); border-left: 3px solid var(--accent); font-size: var(--font-size-sm); line-height: 1.5; }
 
 @media (max-width: 1100px) {

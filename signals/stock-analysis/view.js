@@ -165,10 +165,16 @@ function decisionState(decision) {
   return { code: "wait", label: "等待" };
 }
 
-function renderDataSufficiency(decision) {
+// 证据不足时，新手卡片不展示精确到分的价位：数字的权威感会压过“低置信度”的提醒。
+export function decisionDataSufficiency(decision) {
   const unavailable = decision.environment.dataState === "unavailable";
   const coverage = Number(decision.manager?.coverage);
   const sufficient = !unavailable && Number.isFinite(coverage) && coverage >= 60 && decision.invalidation != null;
+  return { unavailable, coverage, sufficient };
+}
+
+function renderDataSufficiency(decision) {
+  const { unavailable, coverage, sufficient } = decisionDataSufficiency(decision);
   const label = sufficient ? "足够形成研究计划" : "不足，暂不执行";
   const detail = unavailable
     ? "行情或市场环境不可用；缺失数据不会按零分处理。"
@@ -197,6 +203,17 @@ export function renderStockDecisionDynamicMarkup(payload, options = {}) {
   const expectedReturn = decision.tradePlan.expectedReturnPercent == null ? "暂不可计算" : `+${decision.tradePlan.expectedReturnPercent.toFixed(1)}%`;
   const expectedDownside = decision.tradePlan.downsidePercent == null ? "风险待确认" : `失效风险 -${decision.tradePlan.downsidePercent.toFixed(1)}%`;
   const state = decisionState(decision);
+  const { sufficient, coverage } = decisionDataSufficiency(decision);
+  const coverageText = Number.isFinite(coverage) ? `${coverage}%` : "待确认";
+  const pricesCard = sufficient
+    ? `<article class="decision-essential decision-prices"><span>02 · 买卖区间</span><strong>参考买入价 ${escapeHtml(formatZone(decision.tradePlan.entry, currency))}</strong><strong>参考卖出价 ${escapeHtml(formatZone(target, currency))}</strong><small>预期区间回报 ${escapeHtml(expectedReturn)} · ${escapeHtml(expectedDownside)} · 收益风险比 ${escapeHtml(riskReward)}</small></article>`
+    : `<article class="decision-essential decision-prices is-withheld"><span>02 · 买卖区间</span><strong>暂不给出买卖价位</strong><small>关键证据覆盖 ${escapeHtml(coverageText)}，低于 60%，当前不能形成可靠交易计划。价格结构仅在专业模式中作为参考。</small></article>`;
+  const waitCard = sufficient
+    ? `<article class="decision-essential decision-wait"><span>04 · 等待条件</span><strong>${nearSupport ? "进入买入区后止跌确认" : "等待可靠价格结构"}</strong><small>${escapeHtml(buyCondition)}</small></article>`
+    : `<article class="decision-essential decision-wait"><span>04 · 等待条件</span><strong>先补齐关键证据</strong><small>补齐公司研究与市场环境证据、覆盖率达到 60% 后，再判断买入区。</small></article>`;
+  const invalidationCard = sufficient
+    ? `<article class="decision-essential decision-invalid"><span>05 · 失效位</span><strong>${escapeHtml(invalidation)}</strong><small>${decision.invalidation == null ? "数据不足，不生成虚假止损价。" : "收盘跌破代表原买入理由不再成立。"}</small></article>`
+    : `<article class="decision-essential decision-invalid is-withheld"><span>05 · 失效位</span><strong>补齐证据后显示</strong><small>证据不足时不给出止损价，避免把结构参考当成交易计划。</small></article>`;
 
   const missing = decision.manager.missingLabels.length ? decision.manager.missingLabels.join("、") : "当前关键证据已覆盖";
   const insight = options.context?.companyResearchInsight;
@@ -233,15 +250,16 @@ export function renderStockDecisionDynamicMarkup(payload, options = {}) {
     </header>
     <section class="stock-decision-essentials" aria-label="新手决策五步">
       <article class="decision-essential decision-action ${escapeHtml(decision.action.tone)}"><span>01 · 行动</span><strong>${escapeHtml(decision.action.verb)}</strong><small>${escapeHtml(decision.action.label)}</small></article>
-      <article class="decision-essential decision-prices"><span>02 · 买卖区间</span><strong>参考买入价 ${escapeHtml(formatZone(decision.tradePlan.entry, currency))}</strong><strong>参考卖出价 ${escapeHtml(formatZone(target, currency))}</strong><small>预期区间回报 ${escapeHtml(expectedReturn)} · ${escapeHtml(expectedDownside)} · 收益风险比 ${escapeHtml(riskReward)}</small></article>
+      ${pricesCard}
       ${renderPositionSizing(decision, options.context?.sizing, { compact: true })}
-      <article class="decision-essential decision-wait"><span>04 · 等待条件</span><strong>${nearSupport ? "进入买入区后止跌确认" : "等待可靠价格结构"}</strong><small>${escapeHtml(buyCondition)}</small></article>
-      <article class="decision-essential decision-invalid"><span>05 · 失效位</span><strong>${escapeHtml(invalidation)}</strong><small>${decision.invalidation == null ? "数据不足，不生成虚假止损价。" : "收盘跌破代表原买入理由不再成立。"}</small></article>
+      ${waitCard}
+      ${invalidationCard}
       ${renderDataSufficiency(decision)}
     </section>
     <details class="stock-professional-mode">
       <summary><span><strong>专业模式与完整证据</strong><small>期限、原因、经理方法论、价位结构与行动剧本</small></span><em>展开</em></summary>
       <div class="stock-professional-content">
+    ${sufficient ? "" : `<p class="stock-structure-reference-note" role="note">关键证据覆盖 ${escapeHtml(coverageText)}：以下价位仅为结构参考，不构成交易计划。</p>`}
     ${renderHoldingPeriodRail(decision.holdingPeriod.id, decision.holdingPeriod.days)}
     <div class="stock-decision-summary">
       <article class="stock-action-summary ${escapeHtml(decision.action.tone)}">

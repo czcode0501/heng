@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { renderStockAnalysisMarkup } from "../signals/stock-analysis/view.js";
 import {
   buildStockDecision,
+  invalidationBuffer,
   stabilizationGate,
   holdingDaysFromSliderPosition,
   holdingPeriodAt,
@@ -303,9 +304,11 @@ test("single stock analysis renders unified time controls and all technical evid
   assert.match(html, /远端压力/);
   assert.match(html, /优先观察买入区/);
   assert.match(html, /判断失效位/);
-  assert.match(html, /参考买入价/);
-  assert.match(html, /参考卖出价/);
-  assert.match(html, /预期区间回报/);
+  // 无市场环境数据时证据不足：新手卡片不给出精确价位，只在专业模式中保留结构参考。
+  assert.match(html, /暂不给出买卖价位/);
+  assert.match(html, /补齐证据后显示/);
+  assert.match(html, /仅为结构参考，不构成交易计划/);
+  assert.doesNotMatch(html, /预期区间回报/);
   assert.ok(html.indexOf("01 · 行动") < html.indexOf("02 · 买卖区间"));
   assert.ok(html.indexOf("02 · 买卖区间") < html.indexOf("03 · 买多少"));
   assert.ok(html.indexOf("03 · 买多少") < html.indexOf("04 · 等待条件"));
@@ -434,8 +437,9 @@ test("position sizing never presents zero shares as an executable order", () => 
       sentiment: { score: 60, phase: "健康风险偏好", tone: "positive" },
       sizing: {
         currency: "CNY",
-        capital: 7_000,
-        cash: 7_000,
+        // 失效位随 3 个月期限放宽到 3 个 ATR 后，需要足够的风险预算才能进入“低于最小交易单位”分支。
+        capital: 30_000,
+        cash: 30_000,
         currentExposurePct: 0,
         targetExposurePct: 100,
         stockToBaseRate: 7.18,
@@ -486,4 +490,43 @@ test("stabilization gate reports the real trigger in priority order", () => {
   assert.equal(stabilizationGate({ ...base, environmentDescription: "滞胀 防守" }).label, "极端风险环境，等待企稳");
   assert.equal(stabilizationGate({ ...base, timingAvailable: false, timingScore: null }).reason, "timing-unavailable");
   assert.equal(stabilizationGate(base).label, "投资者情绪恐慌恶化，等待企稳");
+});
+
+const FULL_CONTEXT = {
+  marketId: "united-states",
+  managerId: "quant-balanced",
+  macro: { regime: "扩张阶段", stance: "偏进取", confidence: 86 },
+  timing: { score: 72, label: "进攻", exposureBand: "80%–100%", confidence: "高" },
+  sector: { id: "information-technology", title: "信息技术", score: 82, phase: "领先", flowScore: 60 },
+  sentiment: { score: 60, phase: "健康风险偏好", tone: "positive" },
+};
+
+test("stop buffer widens with the holding period on a square-root-of-time scale", () => {
+  assert.equal(invalidationBuffer(4, 200, 1), 2); // 下限 0.5 ATR
+  assert.ok(Math.abs(invalidationBuffer(4, 200, 30) - 4 * Math.sqrt(3)) < 1e-9);
+  assert.equal(invalidationBuffer(4, 200, 90), 12); // 上限 3 ATR
+  assert.equal(invalidationBuffer(4, 200, 365), 12);
+  assert.equal(invalidationBuffer(0, 200, 30), 1); // 无 ATR 时至少价格的 0.5%
+});
+
+test("longer holding periods move the invalidation level and reward-risk instead of reusing one plan", () => {
+  const plans = [5, 30, 365].map((holdingDays) => buildStockDecision(payload, { ...FULL_CONTEXT, holdingDays }));
+  const stops = plans.map((plan) => plan.invalidation);
+
+  assert.ok(stops[0] > stops[1] && stops[1] > stops[2], `stops should widen: ${stops}`);
+  assert.notEqual(plans[0].tradePlan.riskReward, plans[2].tradePlan.riskReward);
+  // 1 年期计划的止损至少在支撑下沿以下 1 个 ATR（payload ATR14 = 4）。
+  assert.ok(plans[2].levels.nearSupport.low - plans[2].invalidation >= 4);
+});
+
+test("beginner card shows precise levels only when evidence coverage is sufficient", () => {
+  const sufficient = renderStockAnalysisMarkup(payload, { holdingPeriod: "3m", chartRange: "3m", context: FULL_CONTEXT });
+  const essentials = (html) => html.slice(html.indexOf("stock-decision-essentials"), html.indexOf("stock-professional-mode"));
+
+  assert.match(essentials(sufficient), /参考买入价 US\$\d/);
+  assert.doesNotMatch(sufficient, /暂不给出买卖价位/);
+
+  const insufficient = renderStockAnalysisMarkup(payload, { holdingPeriod: "3m", chartRange: "3m" });
+  assert.doesNotMatch(essentials(insufficient), /US\$\d/);
+  assert.match(essentials(insufficient), /当前不能形成可靠交易计划/);
 });

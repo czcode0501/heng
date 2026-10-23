@@ -200,6 +200,13 @@ function weightedComposite(components) {
   };
 }
 
+// 止损缓冲随持有期按波动率的平方根缩放：期限越长，正常波动越大，止损不能贴着支撑位。
+// 5 天约 0.7 个 ATR、30 天约 1.7 个、3 个月及以上 3 个；下限为价格的 0.5%。
+export function invalidationBuffer(atr, price, days) {
+  const atrMultiple = Math.min(3, Math.max(0.5, Math.sqrt(Math.max(1, finite(days) ?? 90) / 10)));
+  return Math.max(Math.max(0, finite(atr) ?? 0) * atrMultiple, Math.max(0, finite(price) ?? 0) * 0.005);
+}
+
 export function buildStockDecision(payload, context = {}) {
   const holdingPeriod = context.holdingDays != null
     ? holdingProfileForDays(context.holdingDays)
@@ -221,7 +228,7 @@ export function buildStockDecision(payload, context = {}) {
 
   const atr = Math.max(0, finite(metrics.atr14) ?? 0);
   const invalidation = levels.nearSupport
-    ? Math.max(0, levels.nearSupport.low - Math.max(atr * 0.35, price * 0.005))
+    ? Math.max(0, levels.nearSupport.low - invalidationBuffer(atr, price, holdingPeriod.days))
     : null;
   const entry = levels.nearSupport;
   const target = holdingPeriod.target === "far"

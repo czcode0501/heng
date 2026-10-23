@@ -113,6 +113,7 @@
             <div class="metric-label">自建组合总市值 <span class="live-label">自定义持仓</span></div>
             <strong id="total-value">¥0</strong>
             <div class="metric-foot"><span id="total-change" class="gain">—</span><span>今日收益</span></div>
+            <p class="fx-rate-status" data-fx-rate-status>USD/CNY 汇率读取中</p>
           </article>
           <article class="metric-card">
             <div class="metric-label">累计收益</div>
@@ -207,6 +208,7 @@
               <p class="eyebrow">PORTFOLIO COMPARISON</p>
               <h2>投资思路横向对比</h2>
               <p>使用同一估值口径比较每个组合的总市值、累计收益、当日变化和资产结构。结果由当前组合的数量、成本、现金和行情价格计算，不单独写死对比数字。</p>
+              <p class="fx-rate-status" data-fx-rate-status>USD/CNY 汇率读取中</p>
             </div>
             <span class="structure-status">本机自动保存</span>
           </header>
@@ -300,6 +302,7 @@
           <label><input name="purchase-mode" value="quantity" type="radio" checked><span><strong>按股数购买</strong><small>直接填写计划购买多少股</small></span></label>
           <label><input name="purchase-mode" value="amount" type="radio"><span><strong>按金额购买</strong><small>根据投入金额自动计算股数</small></span></label>
         </fieldset>
+        <div class="position-guard" id="add-position-guard" role="alert" hidden></div>
         <label for="purchase-cost">买入价格 <small id="purchase-currency-label">按股票交易币种</small></label>
         <input id="purchase-cost" name="purchase-cost" type="number" min="0.000001" step="any" required>
         <label id="purchase-quantity-field" for="purchase-quantity">购买股数</label>
@@ -307,9 +310,10 @@
         <label id="purchase-amount-field" for="purchase-amount" hidden>投入金额</label>
         <input id="purchase-amount" name="purchase-amount" type="number" min="0.000001" step="any" hidden>
         <p class="purchase-preview" id="purchase-preview" role="status" aria-live="polite">请填写计划购买股数。</p>
+        <label class="position-ack" id="position-ack-field" hidden><input type="checkbox" id="position-ack"> 我已在券商成交，这里只做记录（衡策不会下单）</label>
         <div class="dialog-actions">
           <button class="button secondary" value="cancel" type="button" id="cancel-add-position-secondary">取消</button>
-          <button class="button primary" value="default" type="submit">确认加入组合</button>
+          <button class="button primary" value="default" type="submit" id="add-position-submit">确认加入组合</button>
         </div>
       </form>
     </dialog>
