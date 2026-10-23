@@ -209,6 +209,16 @@ npm test
 npm run build
 ```
 
+### 决策模型回测
+
+修改决策模型前后，先用历史回放验证决策是否变好：
+
+```bash
+npm run backtest:quick -- --check
+```
+
+回放使用衡策自己的模型代码，每个决策点只使用当日及以前的数据，再与之后的真实走势对比；结果与 `backtest/baseline.json` 对比，并标出退步项。完整说明见 [`docs/backtest.md`](docs/backtest.md)。
+
 测试覆盖数据规范化、评分维度、备用源切换、缓存降级、API 既有功能和前端状态渲染。
 
 ## 中美全市场分层扫描

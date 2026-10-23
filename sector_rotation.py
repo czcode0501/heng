@@ -287,8 +287,12 @@ def build_sector_market(
     source: dict,
     *,
     timing_score: float = 50,
+    include_flow_history: bool = True,
 ) -> dict:
-    """Build one independently ranked market from source-backed daily histories."""
+    """Build one independently ranked market from source-backed daily histories.
+
+    include_flow_history=False skips the display-only capital-flow chart history; scores are unchanged.
+    """
     max_move = MAX_PROXY_DAILY_MOVE.get(market_id, 0.3)
     benchmark, _ = repair_price_series(
         _validated_series(benchmark_points, f"{title}基准", minimum=121), max_daily_move=max_move
@@ -316,7 +320,7 @@ def build_sector_market(
     sectors = []
     for definition in definitions:
         score = current_by_id[definition["id"]]
-        capital_flow = build_capital_flow_snapshot(definition["points"])
+        capital_flow = build_capital_flow_snapshot(definition["points"], include_history=include_flow_history)
         score_change = round(score["score"] - previous_scores[definition["id"]], 1)
         phase = classify_rotation_phase(score["score"], score_change, score["trendQuality"], score["extension"])
         sectors.append(

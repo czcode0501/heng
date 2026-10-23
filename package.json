@@ -11,6 +11,8 @@
     "test:api": "node run-python.mjs -m unittest discover -s tests -v",
     "test:ui": "node --test tests/*.test.js",
     "audit:managers": "node scripts/audit-portfolio-managers.mjs",
+    "backtest": "node run-python.mjs -X utf8 -m backtest",
+    "backtest:quick": "node run-python.mjs -X utf8 -m backtest --quick",
     "scan:prescreen": "node run-python.mjs scripts/prescreen-market.py",
     "scan:market": "node scripts/scan-stock-decisions.mjs",
     "build": "vite build",

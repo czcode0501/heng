@@ -1,0 +1,52 @@
+{
+  "quick": {
+    "metrics": {
+      "timing.us.spearman_f60": -0.25395455866604216,
+      "timing.us.spearman_volatility20": -0.4443163033379819,
+      "timing.us.cagr_vs_constant": -0.014368107971993727,
+      "timing.us.sharpe": 0.7313086017207708,
+      "timing.us.max_drawdown": -0.18655089505676758,
+      "timing.cn.spearman_f60": -0.06647944756379749,
+      "timing.cn.spearman_volatility20": -0.1926154959139693,
+      "timing.cn.cagr_vs_constant": 0.00011736547287255483,
+      "timing.cn.sharpe": 0.0020232492873413816,
+      "timing.cn.max_drawdown": -0.29511879578510825,
+      "rotation.us.ic_f20": 0.014927614882331299,
+      "rotation.us.top3_minus_equal_f20": 0.002428505704043831,
+      "rotation.us.model_minus_equal_cagr": -0.0712299844202775,
+      "stocks.buy_share": 0.01292517006802721,
+      "stocks.buy_f63_minus_baseline": 0.027573236496682613,
+      "stocks.composite_spearman_f63": -0.019561645608095098,
+      "stocks.plan_per_day_minus_hold": 0.00015748205264259777,
+      "stocks.median_reward_to_risk": 0.3148770780390289
+    },
+    "createdAt": "2026-10-23T19:27:24",
+    "commit": "bcbd029",
+    "dataEnd": "2026-10-23"
+  },
+  "full": {
+    "metrics": {
+      "timing.us.spearman_f60": -0.1950342949986961,
+      "timing.us.spearman_volatility20": -0.441268515796409,
+      "timing.us.cagr_vs_constant": -0.02307865746431781,
+      "timing.us.sharpe": 0.6629638534245763,
+      "timing.us.max_drawdown": -0.16942314814815207,
+      "timing.cn.spearman_f60": -0.09244340845458017,
+      "timing.cn.spearman_volatility20": -0.1708309264059059,
+      "timing.cn.cagr_vs_constant": -0.0017567025494925614,
+      "timing.cn.sharpe": -0.06090904704515566,
+      "timing.cn.max_drawdown": -0.29247566161360805,
+      "rotation.us.ic_f20": -0.0047060463253457445,
+      "rotation.us.top3_minus_equal_f20": 7.488564927173997e-05,
+      "rotation.us.model_minus_equal_cagr": -0.09691726957331093,
+      "stocks.buy_share": 0.011844331641285956,
+      "stocks.buy_f63_minus_baseline": 0.032623271836114416,
+      "stocks.composite_spearman_f63": -0.06066805011757896,
+      "stocks.plan_per_day_minus_hold": -6.0744344869458674e-05,
+      "stocks.median_reward_to_risk": 0.31599695792219695
+    },
+    "createdAt": "2026-10-23T19:28:39",
+    "commit": "bcbd029",
+    "dataEnd": "2026-10-23"
+  }
+}
